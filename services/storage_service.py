@@ -2,13 +2,15 @@ import boto3
 from boto3.dynamodb.conditions import Key, Attr
 from datetime import datetime
 import uuid
+import config
 
 dynamodb = boto3.resource('dynamodb')
-table = dynamodb.Table('Coupons')
-pairing_table = dynamodb.Table('Pairing')
-user_state_table = dynamodb.Table('UserState')
+table = dynamodb.Table(config.COUPONS_TABLE)
+pairing_table = dynamodb.Table(config.PAIRING_TABLE)
+user_state_table = dynamodb.Table(config.USER_STATE_TABLE)
 
 def store_new_coupon(client_id, coupon_id, msg_id, coupon_data):
+    """Store a new coupon in the database and share it with paired users if applicable."""
     item = {
         'client_id': client_id,
         'coupon_id': coupon_id,
@@ -33,28 +35,8 @@ def store_new_coupon(client_id, coupon_id, msg_id, coupon_data):
         # share the coupon with the partner
         share_coupon_with_user(client_id, coupon_id, pairing_partner.get("shared_with_client_id"))
 
-# unused function - need to be removed
-def save_coupon_to_db(client_id, coupon_id):
-    table.update_item(
-        Key={'client_id': client_id, 'coupon_id': coupon_id},
-        UpdateExpression='SET coupon_status = :val',
-        ExpressionAttributeValues={':val': "unused"})
-    print("Coupon saved:", coupon_id)    
-
-    # check if the user has a pairing
-    pairing_partner = pairing_table.get_item(Key={'client_id': client_id}).get("Item")
-    if (pairing_partner is not None):
-        # share the coupon with the partner
-        share_coupon_with_user(client_id, coupon_id, pairing_partner.get("shared_with_client_id"))
-    
-def save_coupon_to_db_without_code(client_id, coupon_id):
-    table.update_item(
-        Key={'client_id': client_id, 'coupon_id': coupon_id},
-        UpdateExpression='SET coupon_status = :val, coupon_code = :code',
-        ExpressionAttributeValues={':val': "unused", ':code' : None})
-    print("Coupon saved:", coupon_id)
-
 def update_coupon_details(coupon_data, updated_fields):
+    """Update specific fields of a coupon."""
     if not updated_fields:
         print("No fields to update.")
         return
@@ -113,6 +95,7 @@ def update_coupon_details(coupon_data, updated_fields):
     table.update_item(**update_params)
 
 def mark_coupon_as_used(client_id, coupon_id):
+    """Mark a coupon as used."""
     table.update_item(
         Key={'client_id': client_id, 'coupon_id': coupon_id},
         UpdateExpression='SET coupon_status = :val, used_timestamp = :timestamp',
@@ -120,6 +103,7 @@ def mark_coupon_as_used(client_id, coupon_id):
     print("Coupon marked as used:", coupon_id)
 
 def get_user_coupons(client_id):
+    """Get all unused coupons for a user."""
     response = table.query(
         KeyConditionExpression=Key('client_id').eq(client_id),
         FilterExpression=Attr('coupon_status').eq('unused')
@@ -127,6 +111,7 @@ def get_user_coupons(client_id):
     return response.get('Items', [])
 
 def get_coupon_by_code(client_id, coupon_id):
+    """Get a specific coupon by its ID."""
     print("Getting coupon by code:", client_id, coupon_id)
     response = table.get_item(
         Key={"client_id": client_id, "coupon_id": coupon_id}
@@ -134,6 +119,7 @@ def get_coupon_by_code(client_id, coupon_id):
     return response.get("Item")
 
 def get_shared_coupon(share_token):
+    """Get a coupon that has been shared using a token."""
     # make sure user won't get previously shared coupons
     if (share_token == "..."):
         return None
@@ -150,6 +136,7 @@ def get_shared_coupon(share_token):
         return items[0]
 
 def generate_sharing_token(client_id, coupon_id):
+    """Generate a unique token for sharing a coupon."""
     sharing_token = f"{uuid.uuid4().hex[:8].upper()}"
     table.update_item(
         Key={'client_id': client_id, 'coupon_id': coupon_id},
@@ -160,6 +147,7 @@ def generate_sharing_token(client_id, coupon_id):
     return sharing_token
 
 def share_coupon_with_user(client_id, coupon_id, shared_with_client_id):
+    """Share a coupon with another user."""
     table.update_item(
         Key={'client_id': client_id, 'coupon_id': coupon_id},
         UpdateExpression='SET shared_with = :shared_with, sharing_token = :token',
@@ -168,6 +156,7 @@ def share_coupon_with_user(client_id, coupon_id, shared_with_client_id):
     print("Coupon shared with user:", client_id, coupon_id, shared_with_client_id)
 
 def cancel_coupon_sharing(client_id, coupon_id):
+    """Cancel sharing of a coupon."""
     table.update_item(
         Key={'client_id': client_id, 'coupon_id': coupon_id},
         UpdateExpression='SET shared_with = :shared_with, sharing_token = :token',
@@ -176,6 +165,7 @@ def cancel_coupon_sharing(client_id, coupon_id):
     print("Coupon sharing cancelled:", coupon_id, client_id)
 
 def get_shared_coupons(client_id):
+    """Get all coupons shared with a user."""
     response = table.query(
         IndexName='shared_with-index',
         KeyConditionExpression=Key('shared_with').eq(client_id),
@@ -185,6 +175,7 @@ def get_shared_coupons(client_id):
     return items
 
 def confirm_pairing(my_client_id, his_client_id):
+    """Confirm pairing between two users for coupon sharing."""
     pairing_table.update_item(
         Key={'client_id': my_client_id},
         UpdateExpression='SET shared_with_client_id = :shared_with',
@@ -198,6 +189,7 @@ def confirm_pairing(my_client_id, his_client_id):
         share_coupon_with_user(my_client_id, coupon.get("coupon_id"), his_client_id)
 
 def cancel_pairing(client_id):
+    """Cancel pairing between users."""
     # get pairing partner
     pairing_partner = pairing_table.get_item(Key={'client_id': client_id}).get("Item")
     if (pairing_partner is not None):
@@ -220,6 +212,7 @@ def cancel_pairing(client_id):
             cancel_coupon_sharing(partner_id, coupon.get("coupon_id"))
 
 def cancel_coupon(client_id, coupon_id):
+    """Cancel a coupon."""
     table.update_item(
         Key={'client_id': client_id, 'coupon_id': coupon_id},
         UpdateExpression='SET coupon_status = :val',
@@ -227,6 +220,7 @@ def cancel_coupon(client_id, coupon_id):
     print("Coupon canceled:", coupon_id)
 
 def set_user_state(client_id, updated_state):
+    """Set or update a user's state."""
     if (get_user_state(client_id) is None):
         user_state_table.put_item(Item={'client_id': client_id, 'user_state': updated_state})
         print("User state created:", client_id, updated_state)
@@ -239,8 +233,30 @@ def set_user_state(client_id, updated_state):
     print("User state updated:", client_id, updated_state)
 
 def get_user_state(client_id):
+    """Get a user's current state."""
     response = user_state_table.get_item(Key={'client_id': client_id})
     if response.get("Item") is None:
         return None
     return response.get("Item").get("user_state")
 
+# Remove unused function
+# def save_coupon_to_db(client_id, coupon_id):
+#     table.update_item(
+#         Key={'client_id': client_id, 'coupon_id': coupon_id},
+#         UpdateExpression='SET coupon_status = :val',
+#         ExpressionAttributeValues={':val': "unused"})
+#     print("Coupon saved:", coupon_id)    
+# 
+#     # check if the user has a pairing
+#     pairing_partner = pairing_table.get_item(Key={'client_id': client_id}).get("Item")
+#     if (pairing_partner is not None):
+#         # share the coupon with the partner
+#         share_coupon_with_user(client_id, coupon_id, pairing_partner.get("shared_with_client_id"))
+
+def save_coupon_to_db_without_code(client_id, coupon_id):
+    """Save a coupon without a code."""
+    table.update_item(
+        Key={'client_id': client_id, 'coupon_id': coupon_id},
+        UpdateExpression='SET coupon_status = :val, coupon_code = :code',
+        ExpressionAttributeValues={':val': "unused", ':code' : None})
+    print("Coupon saved:", coupon_id)

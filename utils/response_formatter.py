@@ -1,9 +1,8 @@
-import urllib
-import os
+import urllib.parse
+import config
 
-WHATSAPP_PHONE_NUMBER = os.environ.get("WHATSAPP_PHONE_NUMBER")
-
-def format_response(coupon_id, coupon_data, is_new, is_shared=False):    
+def format_response(coupon_id, coupon_data, is_new, is_shared=False, is_temporary=False):
+    """Format a response with coupon details for WhatsApp."""
     body_lines = []
     
     if coupon_data.get("coupon_code"):
@@ -37,14 +36,14 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False):
         buttons.append({
             "type": "reply",
             "reply": {
-                "id": f"update_coupon_details:{coupon_id}",
+                "id": f"{config.BUTTON_UPDATE_COUPON_DETAILS_PREFIX}{coupon_id}",
                 "title": "עדכן פרטים"
             }
         })
         buttons.append({
             "type": "reply",
             "reply": {
-                "id": f"cancel_coupon:{coupon_id}",
+                "id": f"{config.BUTTON_CANCEL_COUPON_PREFIX}{coupon_id}",
                 "title": "בטל קופון"
             }
         })
@@ -54,7 +53,7 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False):
                 buttons.append({
                     "type": "reply",
                     "reply": {
-                        "id": f"cancel_share:{coupon_id}",
+                        "id": f"{config.BUTTON_CANCEL_SHARE_PREFIX}{coupon_id}",
                         "title": "בטל שיתוף"
                     }
                 })                
@@ -62,7 +61,7 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False):
                 buttons.append({
                     "type": "reply",
                     "reply": {
-                        "id": f"share_coupon:{coupon_id}",
+                        "id": f"{config.BUTTON_SHARE_COUPON_PREFIX}{coupon_id}",
                         "title": "שתף קופון"
                     }
                 }) 
@@ -70,7 +69,7 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False):
         buttons.append({
             "type": "reply",
             "reply": {
-                "id": f"update_coupon:{coupon_id}",
+                "id": f"{config.BUTTON_UPDATE_COUPON_PREFIX}{coupon_id}",
                 "title": "עדכן קופון"
             }
         })
@@ -78,7 +77,7 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False):
         buttons.append({
             "type": "reply",
             "reply": {
-                "id": f"mark_as_used:{coupon_data["client_id"]}:{coupon_id}",
+                "id": f"{config.BUTTON_MARK_AS_USED_PREFIX}{coupon_data['client_id']}:{coupon_id}",
                 "title": "סמן כנוצל"
             }
         })
@@ -108,10 +107,11 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False):
     }
 
 def format_share_coupon_interactive(coupon_data, sharing_token):
+    """Format an interactive message for sharing a coupon."""
     # Generate WhatsApp deep link
     import_coupon_text = f"/add_shared_coupon {sharing_token}"
     import_coupon_text_encoded = urllib.parse.quote(import_coupon_text)
-    import_couopn_deep_link = f"https://wa.me/{WHATSAPP_PHONE_NUMBER}?text={import_coupon_text_encoded}"
+    import_couopn_deep_link = f"https://wa.me/{config.WHATSAPP_PHONE_NUMBER}?text={import_coupon_text_encoded}"
 
     parts = ["היי! 👋", "רציתי לשתף אותך בקופון שקיבלתי 💌"]
 
@@ -146,10 +146,11 @@ def format_share_coupon_interactive(coupon_data, sharing_token):
     }
 
 def format_share_list_interactive(my_number):
+    """Format an interactive message for sharing a coupon list."""
     # Generate WhatsApp deep link
     import_coupon_text = f"/share_list {my_number}"
     import_coupon_text_encoded = urllib.parse.quote(import_coupon_text)
-    import_couopn_deep_link = f"https://wa.me/{WHATSAPP_PHONE_NUMBER}?text={import_coupon_text_encoded}"
+    import_couopn_deep_link = f"https://wa.me/{config.WHATSAPP_PHONE_NUMBER}?text={import_coupon_text_encoded}"
 
     parts = ["היי! 👋", "בוא ננהל רשימת קופונים משותפת ביחד 💌"]    
     parts.append(f"\nכדי לשתף קופונים יחד, לחץ על הקישור👇\n{import_couopn_deep_link}")
@@ -182,6 +183,7 @@ def format_share_list_interactive(my_number):
     }
 
 def format_coupons_list(coupons):
+    """Format a simple text list of coupons."""
     if not coupons:
         return "לא נמצאו קופונים."
 
@@ -200,6 +202,7 @@ def format_coupons_list(coupons):
     return "\n".join(lines)
 
 def format_coupon_list_inline(coupons, shared_coupons):
+    """Format an inline list of coupons for display in a message body."""
     lines = []
     RTL = "\u200F"
 
@@ -245,8 +248,8 @@ def format_coupon_list_inline(coupons, shared_coupons):
 
     return "\n".join(lines)
 
-
-def format_coupons_list_interactive(coupons, shared_coupons, title= "📋 רשימת הקופונים שלך:", footer = "בחר קופון כדי להציג או לבצע פעולה"):
+def format_coupons_list_interactive(coupons, shared_coupons, title="📋 רשימת הקופונים שלך:", footer="בחר קופון כדי להציג או לבצע פעולה"):
+    """Format an interactive list of coupons with buttons."""
     sections = [{
         "title": "הקופונים שלי",
         "rows": []
@@ -259,7 +262,7 @@ def format_coupons_list_interactive(coupons, shared_coupons, title= "📋 רשי
         desc = f"{store} - {code} - בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"
         
         sections[0]["rows"].append({
-            "id": f"coupon:{coupon.get("client_id")}:{coupon.get("coupon_id")}",
+            "id": f"{config.BUTTON_COUPON_PREFIX}{coupon.get('client_id')}:{coupon.get('coupon_id')}",
             "title": f"{store}"[:24],
             "description": desc
         })
@@ -268,14 +271,14 @@ def format_coupons_list_interactive(coupons, shared_coupons, title= "📋 רשי
         sections.append({
         "title": "קופונים ששותפו איתי",
         "rows": []})
-        for idx, shared_coupons in enumerate(shared_coupons, start=1):
-            store = shared_coupons.get("store", "חנות לא ידועה") or "חנות לא ידועה"
-            code = shared_coupons.get("coupon_code", "-") or "(ללא קוד קופון)"
-            exp = shared_coupons.get("expiration_date")
+        for idx, shared_coupon in enumerate(shared_coupons, start=1):
+            store = shared_coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
+            code = shared_coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
+            exp = shared_coupon.get("expiration_date")
             desc = f"{store} - {code} - בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"
             
             sections[1]["rows"].append({
-                "id": f"coupon:{shared_coupons.get("client_id")}:{shared_coupons.get("coupon_id")}",
+                "id": f"{config.BUTTON_COUPON_PREFIX}{shared_coupon.get('client_id')}:{shared_coupon.get('coupon_id')}",
                 "title": f"{store}"[:24],
                 "description": desc
             })
@@ -302,6 +305,7 @@ def format_coupons_list_interactive(coupons, shared_coupons, title= "📋 רשי
     }
 
 def format_welcome_message(new_user=False):
+    """Format a welcome message for new or returning users."""
     if new_user:
         welcome_text = "היי! 😊 כאן אפשר לשמור ולנהל קופונים או שוברים שקיבלת — מטקסט, תמונה או קובץ.\nאפשר גם לשתף קופונים עם מישהו קבוע, או רק לשתף שובר בודד. אני אזכיר לפני שפג התוקף ואשמור על הסדר עבורך."
     else:
@@ -321,21 +325,21 @@ def format_welcome_message(new_user=False):
                     {
                         "type": "reply",
                         "reply": {
-                            "id": "list_coupons",
+                            "id": config.BUTTON_LIST_COUPONS,
                             "title": "📋 הצג קופונים שמורים"
                         }
                     },
                     {
                         "type": "reply",
                         "reply": {
-                            "id": "share_list",
+                            "id": config.BUTTON_SHARE_LIST,
                             "title": "👥 שיתוף רשימה עם חבר"
                         }
                     },
                     {
                         "type": "reply",
                         "reply": {
-                            "id": "how_to_add",
+                            "id": config.BUTTON_HOW_TO_ADD,
                             "title": "➕ איך להוסיף קופון"
                         }
                     }
@@ -345,6 +349,7 @@ def format_welcome_message(new_user=False):
     }
 
 def build_pairing_confirmation_message(phone_number: str) -> dict:
+    """Build a message to confirm pairing with another user."""
     return {
         "type": "interactive",
         "interactive": {
@@ -357,14 +362,14 @@ def build_pairing_confirmation_message(phone_number: str) -> dict:
                     {
                         "type": "reply",
                         "reply": {
-                            "id": f"confirm_pair:{phone_number}",
+                            "id": f"{config.BUTTON_CONFIRM_PAIR_PREFIX}{phone_number}",
                             "title": "✅ מאשר"
                         }
                     },
                     {
                         "type": "reply",
                         "reply": {
-                            "id": f"decline_pair:{phone_number}",
+                            "id": f"{config.BUTTON_DECLINE_PAIR_PREFIX}{phone_number}",
                             "title": "❌ לא מאשר"
                         }
                     }
@@ -374,18 +379,19 @@ def build_pairing_confirmation_message(phone_number: str) -> dict:
     }
 
 def format_update_coupon_message(coupon_data):
+    """Format a message for updating a coupon."""
     coupon_id = coupon_data.get("coupon_id")
     is_shared = coupon_data.get("shared_with") and coupon_data["shared_with"] != "..."
     buttons = [{
         "type": "reply",
         "reply": {
-            "id": f"update_coupon_details:{coupon_id}",
+            "id": f"{config.BUTTON_UPDATE_COUPON_DETAILS_PREFIX}{coupon_id}",
             "title": "עדכן פרטים"
             }
         },{
         "type": "reply",
         "reply": {
-            "id": f"cancel_coupon:{coupon_id}",
+            "id": f"{config.BUTTON_CANCEL_COUPON_PREFIX}{coupon_id}",
             "title": "בטל קופון"
             }
         }]
@@ -394,7 +400,7 @@ def format_update_coupon_message(coupon_data):
             buttons.append({
                 "type": "reply",
                 "reply": {
-                    "id": f"cancel_share:{coupon_id}",
+                    "id": f"{config.BUTTON_CANCEL_SHARE_PREFIX}{coupon_id}",
                     "title": "בטל שיתוף"
                 }
             })                
@@ -402,7 +408,7 @@ def format_update_coupon_message(coupon_data):
             buttons.append({
                 "type": "reply",
                 "reply": {
-                    "id": f"share_coupon:{coupon_id}",
+                    "id": f"{config.BUTTON_SHARE_COUPON_PREFIX}{coupon_id}",
                     "title": "שתף קופון"
                 }
             }) 
@@ -424,6 +430,7 @@ def format_update_coupon_message(coupon_data):
     }
 
 def format_update_coupon_details_message(client_id, coupon_id, text="מה תרצה לעדכן? שלח הודעה בפורמט חופשי או לחץ ❌ לביטול"):
+    """Format a message for updating coupon details."""
     return {
         "type": "interactive",
         "interactive": {
@@ -436,7 +443,7 @@ def format_update_coupon_details_message(client_id, coupon_id, text="מה תרצ
                     {
                         "type": "reply",
                         "reply": {
-                            "id": f"cancel_update_coupon:{client_id}:{coupon_id}",
+                            "id": f"{config.BUTTON_CANCEL_UPDATE_COUPON_PREFIX}{client_id}:{coupon_id}",
                             "title": "❌ ביטול"
                         }
                     }

@@ -1,15 +1,13 @@
 import json
-import os
 import urllib3
+import config
 
 http = urllib3.PoolManager()
-WHATSAPP_TOKEN = os.environ["WHATSAPP_TOKEN"]
-WHATSAPP_PHONE_NUMBER_ID = os.environ["WHATSAPP_PHONE_NUMBER_ID"]
 
 def send_whatsapp_message(to_number, message_payload, is_interactive=False, reg_msg=None):
-    url = f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    url = f"{config.FACEBOOK_GRAPH_API_URL}/{config.WHATSAPP_PHONE_NUMBER_ID}/messages"
     headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Authorization": f"Bearer {config.WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
 
@@ -34,9 +32,9 @@ def send_whatsapp_message(to_number, message_payload, is_interactive=False, reg_
 
 
 def send_whatsapp_message_with_button(to_number, message_text, button_id, button_title):
-    url = f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    url = f"{config.FACEBOOK_GRAPH_API_URL}/{config.WHATSAPP_PHONE_NUMBER_ID}/messages"
     headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Authorization": f"Bearer {config.WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
 
@@ -67,9 +65,9 @@ def send_whatsapp_message_with_button(to_number, message_text, button_id, button
     print("Button send result:", r.status, r.data.decode())
 
 def send_reaction(to_number, message_id, emoji):
-    url = f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    url = f"{config.FACEBOOK_GRAPH_API_URL}/{config.WHATSAPP_PHONE_NUMBER_ID}/messages"
     headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Authorization": f"Bearer {config.WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
     payload = {
@@ -86,9 +84,9 @@ def send_reaction(to_number, message_id, emoji):
     print("Reaction result:", r.status, r.data.decode())
 
 def send_read_receipt(to_number, message_id):
-    url = f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    url = f"{config.FACEBOOK_GRAPH_API_URL}/{config.WHATSAPP_PHONE_NUMBER_ID}/messages"
     headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Authorization": f"Bearer {config.WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
     payload = {
@@ -100,9 +98,9 @@ def send_read_receipt(to_number, message_id):
 
 def download_media(media_id):
     # Step 1: Get the URL of the media using the media ID
-    meta_url = f"https://graph.facebook.com/v19.0/{media_id}"
+    meta_url = f"{config.FACEBOOK_GRAPH_API_URL}/{media_id}"
     meta_headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}"
+        "Authorization": f"Bearer {config.WHATSAPP_TOKEN}"
     }
 
     meta_response = http.request("GET", meta_url, headers=meta_headers)
@@ -113,7 +111,7 @@ def download_media(media_id):
 
     # Step 2: Download the actual media file
     media_headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}"
+        "Authorization": f"Bearer {config.WHATSAPP_TOKEN}"
     }
 
     media_response = http.request("GET", media_url, headers=media_headers)
