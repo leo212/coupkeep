@@ -150,8 +150,16 @@ def handle_text_message(msg, from_number):
             coupon_data["valid"] = True
             whatsapp.send_reaction(from_number, msg_id, config.REACTION_SUCCESS)
             response_with_coupon(coupon_data, msg_id, from_number, is_new=False)
+            storage_service.set_user_state(from_number, config.STATE_IDLE)
         else:
             whatsapp.send_reaction(from_number, msg_id, config.REACTION_ERROR)
+            coupon_id = user_state.split(":")[1]
+            if updated_coupon_data.get("examples"):
+                # Use the examples provided in the updated coupon data
+                examples = "\n".join([f"- “{example}“" for example in updated_coupon_data["examples"]])
+            else:
+                examples = "- “שנה את התוקף ל־1.8.25”\n- “עדכן את שם החנות ל־Fox”\n"
+            whatsapp.send_whatsapp_message(from_number, response_formatter.format_update_coupon_details_message(from_number, coupon_id, text=f"לא הצלחתי להבין את הבקשה לעדכון הקופון.\n\nאפשר לנסות לנסח שוב, למשל:\n{examples}\nאו לחץ ❌ כדי לבטל את העריכה."), is_interactive=True)
     
     return True
 
