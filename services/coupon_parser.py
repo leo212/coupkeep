@@ -190,6 +190,8 @@ FIELDS_TEMPLATE = """
 7. terms_and_conditions – Any restrictions or conditions in the original language.
 8. url –                Link to a website, if one appears
 9. misc –               Any other important information not fitting above fields
+10. category – The type of product or service the coupon is for. Choose the **most relevant** one from this list of exactly 10 categories:
+["food_and_drinks", "clothing_and_fashion", "electronics", "beauty_and_health", "home_and_garden", "travel", "entertainment", "kids_and_babies", "sports_and_outdoors", "other"]
 
 Return the response as a single JSON object.
 """
@@ -222,6 +224,7 @@ Expected fields (only include fields the user requested to change):
   "value": "new_value",
   "terms_and_conditions": "updated_terms",
   "url": "new_url",
-  "misc": "other_info"
+  "misc": "other_info",
+  "category": "new_category" # one of ["food_and_drinks", "clothing_and_fashion", "electronics", "beauty_and_health", "home_and_garden", "travel", "entertainment", "kids_and_babies", "sports_and_outdoors", "other"],
 }}
 """

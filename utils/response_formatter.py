@@ -1,7 +1,43 @@
 import urllib.parse
 import config
+from datetime import datetime
 
-def format_response(coupon_id, coupon_data, is_new, is_shared=False, is_temporary=False):
+def get_category_name(category):
+    """Get the full name of a category based on its short name."""
+    categories = {
+        "food_and_drinks": "מזון ושתייה",
+        "clothing_and_fashion": "ביגוד ואופנה",
+        "electronics": "אלקטרוניקה",
+        "beauty_and_health": "יופי ובריאות",
+        "home_and_garden": "בית וגן",
+        "travel": "נסיעות ונופש",
+        "entertainment": "בידור",
+        "kids_and_babies": "ילדים ותינוקות",
+        "sports_and_outdoors": "ספורט וטיולים",
+        "other": "אחר"
+    }
+    return categories.get(category, category)
+
+def get_category_emoji(category):
+    if not category:
+        return ""
+    
+    """Get the emoji associated with a category."""
+    emojis = {
+        "food_and_drinks": "🍔",
+        "clothing_and_fashion": "👗",
+        "electronics": "📱",
+        "beauty_and_health": "💄",
+        "home_and_garden": "🏡",
+        "travel": "✈️",
+        "entertainment": "🎬",
+        "kids_and_babies": "👶",
+        "sports_and_outdoors": "⚽",
+        "other": ""
+    }
+    return emojis.get(category, "")
+
+def format_response(coupon_id, coupon_data, is_new, is_shared=False):
     """Format a response with coupon details for WhatsApp."""
     body_lines = []
     
@@ -13,22 +49,38 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False, is_temporar
         body_lines.append(f"💸 *הנחה:* {coupon_data['discount_value']}")
     if coupon_data.get("value"):
         body_lines.append(f"🎁 *ערך:* {coupon_data['value']}")
-    if coupon_data.get("terms_and_conditions"):
-        body_lines.append(f"📜 *תנאים:* {coupon_data['terms_and_conditions']}")
+    if coupon_data.get("terms"):
+        body_lines.append(f"📜 *תנאים:* {coupon_data['terms']}")
     if coupon_data.get("url"):
         body_lines.append(f"🔗 *URL:* {coupon_data['url']}")
+    if coupon_data.get("misc"):
+        body_lines.append(f"*מידע נוסף:* {coupon_data['misc']}")
+    if coupon_data.get("category"):
+        category_name = get_category_name(coupon_data["category"])
+    else:
+        category_name = None
 
     if coupon_data.get("store"):
         title = f"*קופון ל-{coupon_data['store']}*"
     else:
-        title = "*פרטי הקופון:*"
-
+        title = f"*פרטי הקופון:*"
+    
+    if category_name:
+        title += f" | {get_category_emoji(coupon_data['category'])} {category_name}"
+    
     if is_shared:
         title += " 👥 "
 
     body_text = title + "\n\n" + "\n".join(body_lines)
-    footer_text = (coupon_data.get("misc", "") or "")[:60]
-
+    if coupon_data.get("expiration_date"):
+        now = datetime.now()
+        expiration_date = datetime.strptime(coupon_data["expiration_date"], "%Y-%m-%d")
+        remaining_days_for_expiration = (expiration_date - now).days
+        if remaining_days_for_expiration < 0:
+            footer_text = "קופון פג תוקף"
+        else:
+            footer_text = "נותרו " + str(remaining_days_for_expiration) + " ימים לניצול הקופון"
+ 
     buttons = []
 
     # show cancel option only for new coupon
@@ -37,14 +89,14 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False, is_temporar
             "type": "reply",
             "reply": {
                 "id": f"{config.BUTTON_UPDATE_COUPON_DETAILS_PREFIX}{coupon_id}",
-                "title": "עדכן פרטים"
+                "title": "📝 עדכן פרטים"
             }
         })
         buttons.append({
             "type": "reply",
             "reply": {
                 "id": f"{config.BUTTON_CANCEL_COUPON_PREFIX}{coupon_id}",
-                "title": "בטל קופון"
+                "title": "🗑️ מחק קופון"
             }
         })
         # show sharing options only for new coupon 
@@ -54,7 +106,7 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False, is_temporar
                     "type": "reply",
                     "reply": {
                         "id": f"{config.BUTTON_CANCEL_SHARE_PREFIX}{coupon_id}",
-                        "title": "בטל שיתוף"
+                        "title": "🤝 בטל שיתוף"
                     }
                 })                
             else:
@@ -62,15 +114,15 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False, is_temporar
                     "type": "reply",
                     "reply": {
                         "id": f"{config.BUTTON_SHARE_COUPON_PREFIX}{coupon_id}",
-                        "title": "שתף קופון"
+                        "title": "🤝 שתף קופון"
                     }
-                }) 
+                })
     else:
         buttons.append({
             "type": "reply",
             "reply": {
-                "id": f"{config.BUTTON_UPDATE_COUPON_PREFIX}{coupon_id}",
-                "title": "עדכן קופון"
+                "id": f"{config.BUTTON_UPDATE_COUPON_DETAILS_PREFIX}{coupon_id}",
+                "title": "📝 עדכן פרטים"
             }
         })
         # show mark as used option only for existing coupon   
@@ -78,7 +130,7 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False, is_temporar
             "type": "reply",
             "reply": {
                 "id": f"{config.BUTTON_MARK_AS_USED_PREFIX}{coupon_data['client_id']}:{coupon_id}",
-                "title": "סמן כנוצל"
+                "title": "✅ סמן כנוצל"
             }
         })
         if not is_shared:
@@ -86,7 +138,7 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False, is_temporar
                 "type": "reply",
                 "reply": {
                     "id": f"show_coupon:{coupon_id}",
-                    "title": "הצג קופון מקורי"
+                    "title": "👁️ הצג קופון מקורי"
                 }
             })
 
@@ -233,7 +285,7 @@ def format_coupon_list_inline(coupons, shared_coupons):
             code = coupon.get("coupon_code")
             exp = coupon.get("expiration_date")
 
-            parts = [f"{RTL}{i}. 🏷️ {store}\n"]
+            parts = [f"{RTL}{len(lines)-1}. 🏷️ {store}\n"]
             if code:
                 parts.append(f"{RTL}🔢 קוד קופון: {code}\n")            
 
@@ -249,13 +301,15 @@ def format_coupon_list_inline(coupons, shared_coupons):
     return "\n".join(lines)
 
 def format_coupons_list_interactive(coupons, shared_coupons, title="📋 רשימת הקופונים שלך:", footer="בחר קופון כדי להציג או לבצע פעולה"):
+    max_coupons = 10
+
     """Format an interactive list of coupons with buttons."""
     sections = [{
         "title": "הקופונים שלי",
         "rows": []
     }]
     
-    for idx, coupon in enumerate(coupons, start=1):
+    for idx, coupon in enumerate(coupons[:max_coupons], start=1):
         store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
         code = coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
         exp = coupon.get("expiration_date")
@@ -267,11 +321,11 @@ def format_coupons_list_interactive(coupons, shared_coupons, title="📋 רשי�
             "description": desc
         })
     
-    if (len(shared_coupons) > 0):
+    if len(shared_coupons) > 0 and len(sections[0]["rows"]) < max_coupons:
         sections.append({
         "title": "קופונים ששותפו איתי",
         "rows": []})
-        for idx, shared_coupon in enumerate(shared_coupons, start=1):
+        for idx, shared_coupon in enumerate(shared_coupons[:max_coupons - len(sections[0]["rows"])], start=1):
             store = shared_coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
             code = shared_coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
             exp = shared_coupon.get("expiration_date")
@@ -386,13 +440,13 @@ def format_update_coupon_message(coupon_data):
         "type": "reply",
         "reply": {
             "id": f"{config.BUTTON_UPDATE_COUPON_DETAILS_PREFIX}{coupon_id}",
-            "title": "עדכן פרטים"
+            "title": "📝 עדכן פרטים"
             }
         },{
         "type": "reply",
         "reply": {
             "id": f"{config.BUTTON_CANCEL_COUPON_PREFIX}{coupon_id}",
-            "title": "בטל קופון"
+            "title": "🗑️ מחק קופון"
             }
         }]
     if not is_shared:
@@ -444,7 +498,14 @@ def format_update_coupon_details_message(client_id, coupon_id, text="מה תרצ
                         "type": "reply",
                         "reply": {
                             "id": f"{config.BUTTON_CANCEL_UPDATE_COUPON_PREFIX}{client_id}:{coupon_id}",
-                            "title": "❌ ביטול"
+                            "title": "❌ בטל עדכון"
+                        }
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": f"{config.BUTTON_CANCEL_COUPON_PREFIX}{coupon_id}",
+                            "title": "🗑️ מחק קופון"
                         }
                     }
                 ]

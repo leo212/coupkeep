@@ -22,6 +22,7 @@ def store_new_coupon(client_id, coupon_id, msg_id, coupon_data):
         'value': coupon_data.get('value'),
         'terms': coupon_data.get('terms_and_conditions'),
         'url': coupon_data.get('url'),
+        'category': coupon_data.get('category'),
         'misc': coupon_data.get('misc'),
         'coupon_status': 'unused',
         'timestamp': datetime.now().isoformat()
@@ -54,7 +55,8 @@ def update_coupon_details(coupon_data, updated_fields):
         '#val': 'value',
         'terms': 'terms_and_conditions',
         'url': 'url',
-        'misc': 'misc'
+        'misc': 'misc',
+        'category': 'category'
     }
 
     # Full mapping of aliases to real DynamoDB attribute names
