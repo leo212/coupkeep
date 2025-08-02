@@ -258,42 +258,40 @@ def format_coupon_list_inline(coupons, shared_coupons):
     lines = []
     RTL = "\u200F"
 
-    # my coupons
-    if coupons:
-        for i, coupon in enumerate(coupons, 1):
-            store = coupon.get("store") or "חנות לא ידועה"
-            code = coupon.get("coupon_code")
-            exp = coupon.get("expiration_date")
+    # merge coupons and shared coupons list
+    for coupon in shared_coupons:
+        coupon["is_shared"] = True
+    
+    all_coupons = coupons + shared_coupons
 
-            parts = [f"{RTL}{i}. 🏷️ {store}\n"]
-            if code:
-                parts.append(f"{RTL}🔢 קוד קופון: {code}\n")            
+    # organize coupons by category
+    categories = {}
+    for coupon in all_coupons:
+        category = coupon.get("category", "other")
+        if category not in categories:
+            categories[category] = []
+        categories[category].append(coupon)
 
-            if exp:
-                parts.append(f"{RTL}⏳ תוקף: {exp}\n")
-
-            line = "".join(parts)
-            lines.append(line)
-
-    # shared coupons
-    if shared_coupons:
-        if lines:
-            lines.append("")  # שורה ריקה לפני הכותרת
-        lines.append("👥 קופונים ששותפו איתי:\n")
-        for i, coupon in enumerate(shared_coupons, 1):
-            store = coupon.get("store") or "חנות לא ידועה"
-            code = coupon.get("coupon_code")
-            exp = coupon.get("expiration_date")
-
-            parts = [f"{RTL}{len(lines)-1}. 🏷️ {store}\n"]
-            if code:
-                parts.append(f"{RTL}🔢 קוד קופון: {code}\n")            
-
-            if exp:
-                parts.append(f"{RTL}⏳ תוקף: {exp}\n")
-
-            line = "".join(parts)
-            lines.append(line)
+    for category, coupons in categories.items():
+        if coupons:
+            category_name = get_category_name(category)
+            category_emoji = get_category_emoji(category)
+            lines.append(f"{category_emoji} *{category_name}*")
+            for coupon in coupons:
+                store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
+                code = coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
+                exp = coupon.get("expiration_date")
+                line = f"- {RTL}{store} - {code} - {exp}"
+                #parts = [f"{RTL}🏷️ {store}\n"]
+                #if code:
+                #    parts.append(f"{RTL}🔢 קוד קופון: {code}\n")
+                #
+                #if exp:
+                #    parts.append(f"{RTL}⏳ תוקף: {exp}\n")
+                #
+                #line = "".join(parts)
+                lines.append(line)    
+            lines.append("")  # Add a blank line after each category
 
     if not lines:
         return "לא נמצאו קופונים 😕"
