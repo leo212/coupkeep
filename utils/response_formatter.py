@@ -80,6 +80,8 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False):
             footer_text = "קופון פג תוקף"
         else:
             footer_text = "נותרו " + str(remaining_days_for_expiration) + " ימים לניצול הקופון"
+    else:
+        footer_text = "ללא תאריך תפוגה"
  
     buttons = []
 
@@ -151,7 +153,7 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False):
             },
             "footer": {
                 "text": footer_text
-            } if footer_text else {},
+            },
             "action": {
                 "buttons": buttons
             }
@@ -311,7 +313,7 @@ def format_coupons_list_interactive(coupons, shared_coupons, title="📋 רשי�
         store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
         code = coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
         exp = coupon.get("expiration_date")
-        desc = f"{store} - {code} - בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"
+        desc = f"{store} - {code} - {f"בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"}"
         
         sections[0]["rows"].append({
             "id": f"{config.BUTTON_COUPON_PREFIX}{coupon.get('client_id')}:{coupon.get('coupon_id')}",
@@ -327,8 +329,8 @@ def format_coupons_list_interactive(coupons, shared_coupons, title="📋 רשי�
             store = shared_coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
             code = shared_coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
             exp = shared_coupon.get("expiration_date")
-            desc = f"{store} - {code} - בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"
-            
+            desc = f"{store} - {code} - {f"בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"}"
+
             sections[1]["rows"].append({
                 "id": f"{config.BUTTON_COUPON_PREFIX}{shared_coupon.get('client_id')}:{shared_coupon.get('coupon_id')}",
                 "title": f"{store}"[:24],
@@ -507,6 +509,132 @@ def format_update_coupon_details_message(client_id, coupon_id, text="מה תרצ
                         }
                     }
                 ]
+            }
+        }
+    }
+
+def format_categories_list(coupons, shared_coupons):
+    """Format a list of categories when user has more than 10 coupons."""
+    all_coupons = coupons + shared_coupons
+    categories = {}
+    
+    for coupon in all_coupons:
+        category = coupon.get("category", "other")
+        if category not in categories:
+            categories[category] = 0
+        categories[category] += 1
+    
+    sections = [{
+        "title": "קטגוריות",
+        "rows": []
+    }]
+    
+    for category, count in categories.items():
+        category_name = get_category_name(category)
+        category_emoji = get_category_emoji(category)
+        
+        sections[0]["rows"].append({
+            "id": f"{config.BUTTON_CATEGORY_PREFIX}{category}",
+            "title": f"{category_emoji} {category_name}",
+            "description": f"{count} קופונים"
+        })
+    
+    return {
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "header": {
+                "type": "text",
+                "text": "🎉 צברת אחלה של קופונים!"
+            },
+            "body": {
+                "text": f"🎁 איזה יופי! צברת כבר {len(all_coupons)} קופונים 🤑\nרוצה למצוא את המתאימים?\nבחר קטגוריה שמתאימה למה שאתה מחפש 🔍"
+            },
+            "footer": {
+                "text": "בחר קטגוריה כדי לראות את הקופונים"
+            },
+            "action": {
+                "button": "בחר קטגוריה",
+                "sections": sections
+            }
+        }
+    }
+
+
+def format_category_coupons_list(coupons, shared_coupons, category):
+    """Format coupons list for a specific category."""
+    category_coupons = [c for c in coupons if c.get("category", "other") == category][:10]
+    category_shared = [c for c in shared_coupons if c.get("category", "other") == category][:10-len(category_coupons)]
+    
+    category_name = get_category_name(category)
+    category_emoji = get_category_emoji(category)
+    
+    sections = []
+    lines = []
+    RTL = "\u200F"
+
+    if category_coupons:
+        sections.append({
+            "title": "הקופונים שלי",
+            "rows": []
+        })
+        
+        for coupon in category_coupons:
+            store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
+            code = coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
+            exp = coupon.get("expiration_date")
+            desc = f"{store} - {code} - {f"בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"}"
+            line = f"- {RTL}{store} - {code} - {exp}"
+            lines.append(line)    
+            sections[0]["rows"].append({
+                "id": f"{config.BUTTON_COUPON_PREFIX}{coupon.get('client_id')}:{coupon.get('coupon_id')}",
+                "title": f"{store}"[:24],
+                "description": desc
+            })
+    
+    if category_shared and len(sections) == 0:
+        sections.append({
+            "title": "קופונים ששותפו איתי",
+            "rows": []
+        })
+        section_idx = 0
+    elif category_shared:
+        sections.append({
+            "title": "קופונים ששותפו איתי",
+            "rows": []
+        })
+        section_idx = 1
+    
+    if category_shared:
+        for coupon in category_shared:
+            store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
+            code = coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
+            exp = coupon.get("expiration_date")
+            desc = f"{store} - {code} - {f"בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"}"
+
+            sections[section_idx]["rows"].append({
+                "id": f"{config.BUTTON_COUPON_PREFIX}{coupon.get('client_id')}:{coupon.get('coupon_id')}",
+                "title": f"{store}"[:24],
+                "description": desc
+            })
+    
+    return {
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "header": {
+                "type": "text",
+                "text": f"{category_emoji} {category_name}"
+            },
+            "body": {
+                "text": "\n".join(lines) or f"{RTL}אין קופונים בקטגוריה זו."
+            },
+            "footer": {
+                "text": "בחר קופון כדי להציג או לבצע פעולה"
+            },
+            "action": {
+                "button": "בחר קופון",
+                "sections": sections
             }
         }
     }

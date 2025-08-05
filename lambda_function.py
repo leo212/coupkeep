@@ -49,7 +49,13 @@ def show_list_of_coupons(from_number):
     coupons = storage_service.get_user_coupons(from_number)
     shared_coupons = storage_service.get_shared_coupons(from_number)
     
-    formatted_list = response_formatter.format_coupons_list_interactive(coupons, shared_coupons)
+    total_coupons = len(coupons) + len(shared_coupons)
+    
+    if total_coupons <= 10:
+        formatted_list = response_formatter.format_coupons_list_interactive(coupons, shared_coupons)
+    else:
+        formatted_list = response_formatter.format_categories_list(coupons, shared_coupons)
+    
     whatsapp.send_whatsapp_message(from_number, formatted_list, is_interactive=True)
 
 def handle_text_message(msg, from_number):
@@ -313,6 +319,13 @@ def handle_interactive_message(msg, from_number):
                 is_shared = client_id != from_number
                 formatted = response_formatter.format_response(coupon_id, coupon_data, is_new=False, is_shared=is_shared)
                 whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
+            return True
+        elif list_id.startswith(config.BUTTON_CATEGORY_PREFIX):
+            category = list_id.split(":")[1]
+            coupons = storage_service.get_user_coupons(from_number)
+            shared_coupons = storage_service.get_shared_coupons(from_number)
+            formatted_list = response_formatter.format_category_coupons_list(coupons, shared_coupons, category)
+            whatsapp.send_whatsapp_message(from_number, formatted_list, is_interactive=True)
             return True
     
     return False
