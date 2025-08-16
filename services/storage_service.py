@@ -54,7 +54,7 @@ def update_coupon_details(coupon_data, updated_fields):
         'discount_value': 'discount_value',
         '#val': 'value',
         'terms': 'terms_and_conditions',
-        'url': 'url',
+        '#url': 'url',
         'misc': 'misc',
         'category': 'category'
     }
@@ -62,7 +62,8 @@ def update_coupon_details(coupon_data, updated_fields):
     # Full mapping of aliases to real DynamoDB attribute names
     full_attribute_name_mapping = {
         '#store': 'store',
-        '#val': 'value'
+        '#val': 'value',
+        '#url': 'url'
     }
 
     for db_field, update_key in field_mapping.items():

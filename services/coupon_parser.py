@@ -181,19 +181,23 @@ TEXT_PROMPT_FOOTER = """Here is the user message:
 """
 IMAGE_PROMPT_TEMPLATE = f"Current year is {datetime.now().year}. You are a coupon extraction bot. This image contains a coupon or a voucher in free form, extract the following fields:" 
 FIELDS_TEMPLATE = """
-1. valid -              is the text identified as a coupon or a voucher? (true/false)
-2. store –              The name of the store or website
-3. coupon_code –        The coupon code or voucher code. basically any long number that looks like a coupon number is valid. if there is a QR code or barcode, it should be above or below it.
-4. expiration_date –    Expiration date if mentioned in ISO 8601, if the coupon text contains only two numbers - assume that it is MM/YY which means the end of month MM in year 20YY (must be in >= current year otherwise treat it as DD/MM in the current year).
-5. discount_value –     The percentage or monetary discount - If the coupon contains discount (e.g., "20%", "$5 off")
-6. value –              The value of coupon or voucher. usually contains a currency symbol or text.
-7. terms_and_conditions – Any restrictions or conditions in the original language.
-8. url –                Link to a website, if one appears
-9. misc –               Any other important information not fitting above fields
-10. category – The type of product or service the coupon is for. Choose the **most relevant** one from this list of exactly 10 categories:
-["food_and_drinks", "clothing_and_fashion", "electronics", "beauty_and_health", "home_and_garden", "travel", "entertainment", "kids_and_babies", "sports_and_outdoors", "other"]
+Current year is 2025. You are a coupon extraction bot. This image contains a coupon or a voucher in free form text, read the entire text, including the small letters and extract the following fields:
+"valid": is the text identified as at least a single coupon or a voucher? (true/false).
+"store": The name of the store or website.
+"coupon_code": The coupon code or voucher code. basically any long number that looks like a coupon number is valid. if there is a QR code or barcode, it should be above or below it.
+"coupon_date": ISO 8601 The date that the coupon was issued.
+"expiration_period": The amount of time that the coupon is valid since issued.
+"expiration_date": ISO 8601 Expiration date if mentioned, if the coupon text contains only two numbers - assume that it is MM/YY which means the end of month MM in year 20YY (must be in >= current year otherwise treat it as DD/MM in the current year), if the expiration date is not present and an expiration period is present, calculate the expiration date using the coupon date if available.
+"discount_value": The percentage or monetary discount - If the coupon contains discount (e.g., "20%", "$5 off")>
+"value" : The worth value of coupon or voucher. usually contains a currency symbol or text.
+"cost": The cost of the voucher.
+"terms_and_conditions" : Any restrictions or conditions in the original language.
+"url": Link to a website, if one appears.
+"category" : The type of product or service the coupon is for. Choose the most relevant one from this list of exactly 10 categories:
+["food_and_drinks", "clothing_and_fashion", "electronics", "beauty_and_health", "home_and_garden", "travel", "entertainment", "kids_and_babies", "sports_and_outdoors", "other"].
+"misc": Any other important information not fitting above fields, use the same language as the coupon.
 
-Return the response as a single JSON object.
+Return the response as a single JSON object. if there are multiple coupons, return an array of JSON objects.
 """
 
 # Prompt for update requests (edit coupon)
