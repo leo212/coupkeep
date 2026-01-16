@@ -126,6 +126,34 @@ def handle_text_message(msg, from_number):
         if user_state == config.STATE_IDLE:
             # extract fields using NLP
             coupon_data = coupon_parser.parse_coupon_details(msg_text)
+            # check if there are more than one coupon
+            if isinstance(coupon_data, list):
+                # Handle multiple coupons
+                valid_coupons = False
+                for coupon in coupon_data:
+                    if coupon["valid"]:
+                        response_with_coupon(coupon, msg_id, from_number, is_new=True)
+                        valid_coupons = True
+                
+                if not valid_coupons:
+                    # clear reaction
+                    whatsapp.send_reaction(from_number, msg_id, config.REACTION_NONE)
+                    whatsapp.send_whatsapp_message(from_number, response_formatter.format_welcome_message(new_user=False), is_interactive=True)
+
+            else:            
+                if not coupon_data["valid"]:
+                    # clear reaction
+                    whatsapp.send_reaction(from_number, msg_id, config.REACTION_NONE)
+
+                    # check if the user has valid coupons
+                    coupons = storage_service.get_user_coupons(from_number)
+                    if len(coupons) > 0:                                
+                        whatsapp.send_whatsapp_message(from_number, response_formatter.format_welcome_message(new_user=False), is_interactive=True)
+                    else:
+                        whatsapp.send_whatsapp_message(from_number, response_formatter.format_welcome_message(new_user=True), is_interactive=True)
+                else:
+                    response_with_coupon(coupon_data, msg_id, from_number)
+                
         elif user_state.startswith(config.STATE_UPDATE_COUPON_PREFIX):
             coupon_id = user_state.split(":")[1]
             print("Updating coupon:", coupon_id)
@@ -136,20 +164,7 @@ def handle_text_message(msg, from_number):
         coupon_data = { "valid": False }
         updated_coupon_data = { "valid": False }
 
-    if user_state == config.STATE_IDLE:
-        if not coupon_data["valid"]:
-            # clear reaction
-            whatsapp.send_reaction(from_number, msg_id, config.REACTION_NONE)
-
-            # check if the user has valid coupons
-            coupons = storage_service.get_user_coupons(from_number)
-            if len(coupons) > 0:                                
-                whatsapp.send_whatsapp_message(from_number, response_formatter.format_welcome_message(new_user=False), is_interactive=True)
-            else:
-                whatsapp.send_whatsapp_message(from_number, response_formatter.format_welcome_message(new_user=True), is_interactive=True)
-        else:
-            response_with_coupon(coupon_data, msg_id, from_number)
-    elif user_state.startswith(config.STATE_UPDATE_COUPON_PREFIX):
+    if user_state.startswith(config.STATE_UPDATE_COUPON_PREFIX):
         if updated_coupon_data["valid"]:
             # update the coupon
             storage_service.update_coupon_details(coupon_data, updated_coupon_data)
@@ -201,8 +216,23 @@ def handle_media_message(msg, from_number):
             else:
                 # Process as image
                 coupon_data = coupon_parser.parse_image(media_bytes)
+
+            # check if there are more than one coupon
+            print("Parsed coupon data:", json.dumps(coupon_data, ensure_ascii=False))
+            if isinstance(coupon_data, list):
+                # Handle multiple coupons
+                valid_coupons = False
+                for coupon in coupon_data:
+                    if coupon["valid"]:
+                        response_with_coupon(coupon, msg_id, from_number, is_new=True)
+                        valid_coupons = True
                 
-            response_with_coupon(coupon_data, msg_id, from_number)
+                if not valid_coupons:
+                    # clear reaction
+                    whatsapp.send_reaction(from_number, msg_id, config.REACTION_NONE)
+                    whatsapp.send_whatsapp_message(from_number, response_formatter.format_welcome_message(new_user=False), is_interactive=True)
+            else:    
+                response_with_coupon(coupon_data, msg_id, from_number)
             return True
         except Exception as e:
             print(f"Error processing media: {str(e)}")
@@ -319,6 +349,9 @@ def handle_interactive_message(msg, from_number):
                 is_shared = client_id != from_number
                 formatted = response_formatter.format_response(coupon_id, coupon_data, is_new=False, is_shared=is_shared)
                 whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
+                # Send coupon code separately for easy copy-paste
+                if coupon_data.get("coupon_code"):
+                    whatsapp.send_whatsapp_message(from_number, coupon_data["coupon_code"])
             return True
         elif list_id.startswith(config.BUTTON_CATEGORY_PREFIX):
             category = list_id.split(":")[1]

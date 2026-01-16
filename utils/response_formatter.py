@@ -74,7 +74,12 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False):
     body_text = title + "\n\n" + "\n".join(body_lines)
     if coupon_data.get("expiration_date"):
         now = datetime.now()
-        expiration_date = datetime.strptime(coupon_data["expiration_date"], "%Y-%m-%d")
+        exp_date_str = coupon_data["expiration_date"]
+        # Handle both date-only and datetime formats
+        if 'T' in exp_date_str:
+            expiration_date = datetime.fromisoformat(exp_date_str.split('.')[0])  # Remove microseconds if present
+        else:
+            expiration_date = datetime.strptime(exp_date_str, "%Y-%m-%d")
         remaining_days_for_expiration = (expiration_date - now).days
         if remaining_days_for_expiration < 0:
             footer_text = "קופון פג תוקף"
@@ -281,17 +286,8 @@ def format_coupon_list_inline(coupons, shared_coupons):
             lines.append(f"{category_emoji} *{category_name}*")
             for coupon in coupons:
                 store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
-                code = coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
-                exp = coupon.get("expiration_date")
-                line = f"- {RTL}{store} - {code} - {exp}"
-                #parts = [f"{RTL}🏷️ {store}\n"]
-                #if code:
-                #    parts.append(f"{RTL}🔢 קוד קופון: {code}\n")
-                #
-                #if exp:
-                #    parts.append(f"{RTL}⏳ תוקף: {exp}\n")
-                #
-                #line = "".join(parts)
+                value = coupon.get("value") or coupon.get("discount_value") or ""
+                line = f"- {RTL}{store}" + (f" - {value}" if value else "")
                 lines.append(line)    
             lines.append("")  # Add a blank line after each category
 
@@ -311,9 +307,9 @@ def format_coupons_list_interactive(coupons, shared_coupons, title="📋 רשי�
     
     for idx, coupon in enumerate(coupons[:max_coupons], start=1):
         store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
-        code = coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
-        exp = coupon.get("expiration_date")
-        desc = f"{store} - {code} - {f"בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"}"
+        code = coupon.get("coupon_code", "-") or "(ללא קוד)"
+        value = coupon.get("value") or coupon.get("discount_value") or ""
+        desc = (f"{value} - " if value else "") + f"קוד: {code}"
         
         sections[0]["rows"].append({
             "id": f"{config.BUTTON_COUPON_PREFIX}{coupon.get('client_id')}:{coupon.get('coupon_id')}",
@@ -327,9 +323,9 @@ def format_coupons_list_interactive(coupons, shared_coupons, title="📋 רשי�
         "rows": []})
         for idx, shared_coupon in enumerate(shared_coupons[:max_coupons - len(sections[0]["rows"])], start=1):
             store = shared_coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
-            code = shared_coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
-            exp = shared_coupon.get("expiration_date")
-            desc = f"{store} - {code} - {f"בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"}"
+            code = shared_coupon.get("coupon_code", "-") or "(ללא קוד)"
+            value = shared_coupon.get("value") or shared_coupon.get("discount_value") or ""
+            desc = (f"{value} - " if value else "") + f"קוד: {code}"
 
             sections[1]["rows"].append({
                 "id": f"{config.BUTTON_COUPON_PREFIX}{shared_coupon.get('client_id')}:{shared_coupon.get('coupon_id')}",
@@ -520,23 +516,43 @@ def format_categories_list(coupons, shared_coupons):
     
     for coupon in all_coupons:
         category = coupon.get("category", "other")
+        store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
         if category not in categories:
-            categories[category] = 0
-        categories[category] += 1
+            categories[category] = {}
+        if store not in categories[category]:
+            categories[category][store] = 0
+        categories[category][store] += 1
     
     sections = [{
         "title": "קטגוריות",
         "rows": []
     }]
     
-    for category, count in categories.items():
+    for category, stores in categories.items():
         category_name = get_category_name(category)
         category_emoji = get_category_emoji(category)
+        
+        # Build store list with counts, ensuring we don't cut store names
+        store_list = [f"{store} ({count})" if count > 1 else store for store, count in stores.items()]
+        desc_parts = []
+        current_length = 0
+        
+        for store_item in store_list:
+            item_length = len(store_item) + (2 if desc_parts else 0)  # +2 for ", "
+            if current_length + item_length <= 64:
+                desc_parts.append(store_item)
+                current_length += item_length
+            else:
+                break
+        
+        desc = ", ".join(desc_parts)
+        if len(desc_parts) < len(store_list):
+            desc += " ועוד..."
         
         sections[0]["rows"].append({
             "id": f"{config.BUTTON_CATEGORY_PREFIX}{category}",
             "title": f"{category_emoji} {category_name}",
-            "description": f"{count} קופונים"
+            "description": desc
         })
     
     return {
@@ -581,10 +597,10 @@ def format_category_coupons_list(coupons, shared_coupons, category):
         
         for coupon in category_coupons:
             store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
-            code = coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
-            exp = coupon.get("expiration_date")
-            desc = f"{store} - {code} - {f"בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"}"
-            line = f"- {RTL}{store} - {code} - {exp}"
+            code = coupon.get("coupon_code", "-") or "(ללא קוד)"
+            value = coupon.get("value") or coupon.get("discount_value") or ""
+            desc = (f"{value} - " if value else "") + f"קוד: {code}"
+            line = f"- {RTL}{store}" + (f" - {value}" if value else "")
             lines.append(line)    
             sections[0]["rows"].append({
                 "id": f"{config.BUTTON_COUPON_PREFIX}{coupon.get('client_id')}:{coupon.get('coupon_id')}",
@@ -608,9 +624,9 @@ def format_category_coupons_list(coupons, shared_coupons, category):
     if category_shared:
         for coupon in category_shared:
             store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
-            code = coupon.get("coupon_code", "-") or "(ללא קוד קופון)"
-            exp = coupon.get("expiration_date")
-            desc = f"{store} - {code} - {f"בתוקף עד {exp}" if exp else "ללא תאריך תפוגה"}"
+            code = coupon.get("coupon_code", "-") or "(ללא קוד)"
+            value = coupon.get("value") or coupon.get("discount_value") or ""
+            desc = (f"{value} - " if value else "") + f"קוד: {code}"
 
             sections[section_idx]["rows"].append({
                 "id": f"{config.BUTTON_COUPON_PREFIX}{coupon.get('client_id')}:{coupon.get('coupon_id')}",
