@@ -1,6 +1,6 @@
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import config
 
@@ -105,11 +105,18 @@ def mark_coupon_as_used(client_id, coupon_id):
         ExpressionAttributeValues={':val': "used", ':timestamp': datetime.now().isoformat()})
     print("Coupon marked as used:", coupon_id)
 
-def get_user_coupons(client_id):
-    """Get all unused coupons for a user."""
+def get_user_coupons(client_id, expiring_soon=False, days=30):
+    """Get all unused coupons for a user. Optionally filter for expiring soon."""
+    filter_expr = Attr('coupon_status').eq('unused')
+    
+    if expiring_soon:
+        now = datetime.now()
+        future = now + timedelta(days=days)
+        filter_expr &= Attr('expiration_date').gt(now.isoformat()) & Attr('expiration_date').lte(future.isoformat())
+    
     response = table.query(
         KeyConditionExpression=Key('client_id').eq(client_id),
-        FilterExpression=Attr('coupon_status').eq('unused')
+        FilterExpression=filter_expr
     )
     return response.get('Items', [])
 
@@ -167,12 +174,19 @@ def cancel_coupon_sharing(client_id, coupon_id):
     )
     print("Coupon sharing cancelled:", coupon_id, client_id)
 
-def get_shared_coupons(client_id):
-    """Get all coupons shared with a user."""
+def get_shared_coupons(client_id, expiring_soon=False, days=30):
+    """Get all coupons shared with a user. Optionally filter for expiring soon."""
+    filter_expr = Attr('coupon_status').eq('unused')
+    
+    if expiring_soon:
+        now = datetime.now()
+        future = now + timedelta(days=days)
+        filter_expr &= Attr('expiration_date').gt(now.isoformat()) & Attr('expiration_date').lte(future.isoformat())
+    
     response = table.query(
         IndexName='shared_with-index',
         KeyConditionExpression=Key('shared_with').eq(client_id),
-        FilterExpression=Attr('coupon_status').eq('unused')
+        FilterExpression=filter_expr
     )
     items = response.get('Items', [])
     return items
@@ -241,20 +255,6 @@ def get_user_state(client_id):
     if response.get("Item") is None:
         return None
     return response.get("Item").get("user_state")
-
-# Remove unused function
-# def save_coupon_to_db(client_id, coupon_id):
-#     table.update_item(
-#         Key={'client_id': client_id, 'coupon_id': coupon_id},
-#         UpdateExpression='SET coupon_status = :val',
-#         ExpressionAttributeValues={':val': "unused"})
-#     print("Coupon saved:", coupon_id)    
-# 
-#     # check if the user has a pairing
-#     pairing_partner = pairing_table.get_item(Key={'client_id': client_id}).get("Item")
-#     if (pairing_partner is not None):
-#         # share the coupon with the partner
-#         share_coupon_with_user(client_id, coupon_id, pairing_partner.get("shared_with_client_id"))
 
 def save_coupon_to_db_without_code(client_id, coupon_id):
     """Save a coupon without a code."""

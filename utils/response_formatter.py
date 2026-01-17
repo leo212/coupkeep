@@ -509,7 +509,7 @@ def format_update_coupon_details_message(client_id, coupon_id, text="מה תרצ
         }
     }
 
-def format_categories_list(coupons, shared_coupons):
+def format_categories_list(coupons, shared_coupons, title="🎉 צברת אחלה של קופונים!"):
     """Format a list of categories when user has more than 10 coupons."""
     all_coupons = coupons + shared_coupons
     categories = {}
@@ -561,7 +561,7 @@ def format_categories_list(coupons, shared_coupons):
             "type": "list",
             "header": {
                 "type": "text",
-                "text": "🎉 צברת אחלה של קופונים!"
+                "text": title
             },
             "body": {
                 "text": f"🎁 איזה יופי! צברת כבר {len(all_coupons)} קופונים 🤑\nרוצה למצוא את המתאימים?\nבחר קטגוריה שמתאימה למה שאתה מחפש 🔍"

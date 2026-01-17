@@ -11,6 +11,7 @@ import services.coupon_parser as coupon_parser
 import services.whatsapp as whatsapp
 import services.storage_service as storage_service
 import utils.response_formatter as response_formatter
+from datetime import datetime, timedelta
 
 http = urllib3.PoolManager()
 
@@ -39,22 +40,30 @@ def response_with_coupon(coupon_data, msg_id, phone_number, is_new=True):
     else:
         whatsapp.send_reaction(phone_number, msg_id, config.REACTION_ERROR)
 
-def show_list_of_coupons(from_number):
+def show_list_of_coupons(from_number, expiring_soon=False):
     """
     Retrieves and displays the user's coupons and any shared coupons.
     
     Args:
         from_number: User's phone number
+        expiring_soon: If True, show only coupons expiring soon
     """
-    coupons = storage_service.get_user_coupons(from_number)
-    shared_coupons = storage_service.get_shared_coupons(from_number)
+    coupons = storage_service.get_user_coupons(from_number, expiring_soon=expiring_soon)
+    shared_coupons = storage_service.get_shared_coupons(from_number, expiring_soon=expiring_soon)
     
     total_coupons = len(coupons) + len(shared_coupons)
     
-    if total_coupons <= 10:
-        formatted_list = response_formatter.format_coupons_list_interactive(coupons, shared_coupons)
+    if expiring_soon:
+        title_coupons = "📋 קופונים שעומדים לפוג בקרוב:"
+        title_categories = "🎉 קופונים שעומדים לפוג בקרוב!"
     else:
-        formatted_list = response_formatter.format_categories_list(coupons, shared_coupons)
+        title_coupons = "📋 רשימת הקופונים שלך:"
+        title_categories = "🎉 צברת אחלה של קופונים!"
+    
+    if total_coupons <= 10:
+        formatted_list = response_formatter.format_coupons_list_interactive(coupons, shared_coupons, title=title_coupons)
+    else:
+        formatted_list = response_formatter.format_categories_list(coupons, shared_coupons, title=title_categories)
     
     whatsapp.send_whatsapp_message(from_number, formatted_list, is_interactive=True)
 
@@ -75,6 +84,9 @@ def handle_text_message(msg, from_number):
     # Handle commands
     if msg_text == config.CMD_LIST or msg_text == config.CMD_LIST_SHORT:                            
         show_list_of_coupons(from_number)
+        return True
+    elif msg_text == "/list_expiring":
+        show_list_of_coupons(from_number, expiring_soon=True)
         return True
     elif msg_text.startswith(config.CMD_ADD_SHARED_COUPON):                                                        
         # Extract the coupon ID from the message text
@@ -363,6 +375,29 @@ def handle_interactive_message(msg, from_number):
     
     return False
 
+def handle_button_message(msg, from_number):
+    """
+    Handles button messages from users.
+    
+    Args:
+        msg: Message object from WhatsApp
+        from_number: User's phone number
+        
+    Returns:
+        Boolean indicating if the message was handled
+    """
+    if "button" not in msg:
+        return False
+    
+    button_payload = msg["button"]["payload"]
+    msg_id = msg["id"]
+    
+    if button_payload == "הצג קופונים שעומדים לפוג":
+        show_list_of_coupons(from_number, expiring_soon=True)
+        return True
+    
+    return False
+
 def lambda_handler(event, context):
     """
     AWS Lambda handler function for processing WhatsApp webhook events.
@@ -413,6 +448,8 @@ def lambda_handler(event, context):
                     handle_media_message(msg, from_number)
                 elif msg.get("type") == "interactive":
                     handle_interactive_message(msg, from_number)
+                elif msg.get("type") == "button":
+                    handle_button_message(msg, from_number)
                     
             return {"statusCode": 200, "body": "OK"}
         except Exception as e:
