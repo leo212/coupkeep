@@ -32,6 +32,7 @@ REACTION_NONE = ""
 # User states
 STATE_IDLE = "idle"
 STATE_UPDATE_COUPON_PREFIX = "update_coupon:"
+STATE_REGISTRATION_PENDING = "registration_pending"
 
 # Command prefixes
 CMD_LIST = "/list"
@@ -56,3 +57,4 @@ BUTTON_DECLINE_PAIR_PREFIX = "decline_pair:"
 BUTTON_SHOW_COUPON_PREFIX = "show_coupon:"
 BUTTON_COUPON_PREFIX = "coupon:"
 BUTTON_CATEGORY_PREFIX = "category:"
+BUTTON_AGREE = "agree"

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 AWS Lambda function for handling WhatsApp webhook events for coupon management.
 """
@@ -81,6 +82,16 @@ def handle_text_message(msg, from_number):
     msg_text = msg["text"]["body"]
     msg_id = msg["id"]
     
+    # Check user state first - new users must register
+    user_state = storage_service.get_user_state(from_number)
+    if user_state is None or user_state == config.STATE_REGISTRATION_PENDING:
+        # new user or pending registration
+        if user_state is None:
+            storage_service.set_user_state(from_number, config.STATE_REGISTRATION_PENDING)
+        formatted = response_formatter.format_registration_welcome()
+        whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
+        return True
+    
     # Handle commands
     if msg_text == config.CMD_LIST or msg_text == config.CMD_LIST_SHORT:                            
         show_list_of_coupons(from_number)
@@ -124,14 +135,13 @@ def handle_text_message(msg, from_number):
         whatsapp.send_reaction(from_number, msg_id, config.REACTION_SUCCESS)
         return True
         
+    # Handle short messages for registered users
+    if len(msg_text) <= 10 and user_state == config.STATE_IDLE:
+        formatted = response_formatter.format_welcome_message(new_user=False)
+        whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
+        return True
+        
     # Handle regular text (potential coupon)
-    user_state = storage_service.get_user_state(from_number)
-
-    if user_state is None:
-        # new user
-        user_state = config.STATE_IDLE
-        storage_service.set_user_state(from_number, user_state)
-    
     if len(msg_text) > 10:
         whatsapp.send_reaction(from_number, msg_id, config.REACTION_PROCESSING)
 
@@ -172,27 +182,22 @@ def handle_text_message(msg, from_number):
             coupon_data = storage_service.get_coupon_by_code(from_number, coupon_id)
             updated_coupon_data = coupon_parser.parse_update_request_details(coupon_data, msg_text)
             print("Updated coupon data:", json.dumps(updated_coupon_data))
-    else:
-        coupon_data = { "valid": False }
-        updated_coupon_data = { "valid": False }
-
-    if user_state.startswith(config.STATE_UPDATE_COUPON_PREFIX):
-        if updated_coupon_data["valid"]:
-            # update the coupon
-            storage_service.update_coupon_details(coupon_data, updated_coupon_data)
-            coupon_data["valid"] = True
-            whatsapp.send_reaction(from_number, msg_id, config.REACTION_SUCCESS)
-            response_with_coupon(coupon_data, msg_id, from_number, is_new=False)
-            storage_service.set_user_state(from_number, config.STATE_IDLE)
-        else:
-            whatsapp.send_reaction(from_number, msg_id, config.REACTION_ERROR)
-            coupon_id = user_state.split(":")[1]
-            if updated_coupon_data.get("examples"):
-                # Use the examples provided in the updated coupon data
-                examples = "\n".join([f"- “{example}“" for example in updated_coupon_data["examples"]])
+            
+            if updated_coupon_data["valid"]:
+                # update the coupon
+                storage_service.update_coupon_details(coupon_data, updated_coupon_data)
+                coupon_data["valid"] = True
+                whatsapp.send_reaction(from_number, msg_id, config.REACTION_SUCCESS)
+                response_with_coupon(coupon_data, msg_id, from_number, is_new=False)
+                storage_service.set_user_state(from_number, config.STATE_IDLE)
             else:
-                examples = "- “שנה את התוקף ל־1.8.25”\n- “עדכן את שם החנות ל־Fox”\n"
-            whatsapp.send_whatsapp_message(from_number, response_formatter.format_update_coupon_details_message(from_number, coupon_id, text=f"לא הצלחתי להבין את הבקשה לעדכון הקופון.\n\nאפשר לנסות לנסח שוב, למשל:\n{examples}\nאו לחץ ❌ כדי לבטל את העריכה."), is_interactive=True)
+                whatsapp.send_reaction(from_number, msg_id, config.REACTION_ERROR)
+                if updated_coupon_data.get("examples"):
+                    # Use the examples provided in the updated coupon data
+                    examples = "\n".join([f'- "{example}"' for example in updated_coupon_data["examples"]])
+                else:
+                    examples = '- "שנה את התוקף ל-1.8.25"\n- "עדכן את שם החנות ל-Fox"\n'
+                whatsapp.send_whatsapp_message(from_number, response_formatter.format_update_coupon_details_message(from_number, coupon_id, text=f"לא הצלחתי להבין את הבקשה לעדכון הקופון.\n\nאפשר לנסות לנסח שוב, למשל:\n{examples}או לחץ ❌ כדי לבטל את העריכה."), is_interactive=True)
     
     return True
 
@@ -210,6 +215,12 @@ def handle_media_message(msg, from_number):
     msg_id = msg["id"]
     media_id = None
     media_type = msg.get("type")
+    
+    user_state = storage_service.get_user_state(from_number)
+    if user_state is None or user_state == config.STATE_REGISTRATION_PENDING:
+        formatted = response_formatter.format_registration_welcome()
+        whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
+        return True
     
     if media_type == "image":
         media_id = msg["image"]["id"]
@@ -272,8 +283,18 @@ def handle_interactive_message(msg, from_number):
     interactive = msg["interactive"]
     msg_id = msg["id"]
     
+    user_state = storage_service.get_user_state(from_number)
+    
     if interactive.get("type") == "button_reply":
         button_id = interactive["button_reply"]["id"]
+        
+        if button_id == config.BUTTON_AGREE:
+            if user_state == config.STATE_REGISTRATION_PENDING:
+                # Agreeing to terms and privacy, complete registration
+                storage_service.set_user_state(from_number, config.STATE_IDLE)
+                formatted = response_formatter.format_commands_list()
+                whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
+            return True
         
         if button_id == config.BUTTON_LIST_COUPONS:
             show_list_of_coupons(from_number)
@@ -391,6 +412,12 @@ def handle_button_message(msg, from_number):
     
     button_payload = msg["button"]["payload"]
     msg_id = msg["id"]
+    
+    user_state = storage_service.get_user_state(from_number)
+    if user_state is None or user_state == config.STATE_REGISTRATION_PENDING:
+        formatted = response_formatter.format_registration_welcome()
+        whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
+        return True
     
     if button_payload == "הצג קופונים שעומדים לפוג":
         show_list_of_coupons(from_number, expiring_soon=True)

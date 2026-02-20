@@ -654,3 +654,156 @@ def format_category_coupons_list(coupons, shared_coupons, category):
             }
         }
     }
+
+def format_registration_welcome():
+    """Format the registration welcome message with all terms, privacy, and agree button."""
+    combined_text = (
+        "ברוכים הבאים לבוט ניהול הקופונים! 🎉\n\n"
+        "לפני שנתחיל, אנא קרא את תנאי השימוש ומדיניות הפרטיות:\n\n"
+        "*תנאי שימוש*\n\n"
+        "קופי - בוט לניהול קופונים אינו אחראי לאובדן נתונים, נזק או הפסד כלשהו הנובע משימוש בשירות. "
+        "המשתמש נושא באחריות מלאה לשמירת מידע הקופונים במקומות חלופיים. "
+        "במקרה של מחיקת נתונים ממסד הנתונים של הבוט, המשתמש לא יהיה זכאי לפיצוי או לשחזור הנתונים.\n\n"
+        "השימוש בבוט נעשה על אחריותו הבלעדית של המשתמש.\n\n"
+        "*מדיניות פרטיות*\n\n"
+        "קופי - בוט לניהול קופונים מתחייב שלא להשתמש בנתוני הקופונים לצרכים מסחריים או להעבירם לצדדים שלישיים. "
+        "הנתונים מאוחסנים בבסיס נתונים מאובטח בפלטפורמת AWS ומוגנים באמצעים טכניים מתקדמים.\n\n"
+        "עם זאת, הבוט עשוי להשתמש בנתונים סטטיסטיים אנונימיים (ללא פרטים מזהים או קודי קופונים) לצורך שיפור השירות, ניתוח מגמות ופיתוח תכונות עתידיות."
+    )
+    return {
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {
+                "text": combined_text
+            },
+            "footer": {
+                "text": "אחרי קריאת התנאים והמדיניות, לחץ על מסכים"
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": config.BUTTON_AGREE,
+                            "title": "✅ מסכים לכל"
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+def format_terms_of_service():
+    """Format the terms of service message."""
+    terms_text = (
+        "*תנאי שימוש*\n\n"
+        "קופי - בוט לניהול קופונים אינו אחראי לאובדן נתונים, נזק או הפסד כלשהו הנובע משימוש בשירות. "
+        "המשתמש נושא באחריות מלאה לשמירת מידע הקופונים במקומות חלופיים. "
+        "במקרה של מחיקת נתונים ממסד הנתונים של הבוט, המשתמש לא יהיה זכאי לפיצוי או לשחזור הנתונים.\n\n"
+        "השימוש בבוט נעשה על אחריותו הבלעדית של המשתמש."
+    )
+    return {
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {
+                "text": terms_text
+            },
+            "footer": {
+                "text": "אחרי קריאת התנאים, לחץ על מסכים"
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": config.BUTTON_AGREE,
+                            "title": "✅ מסכים"
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+def format_privacy_policy():
+    """Format the privacy policy message."""
+    privacy_text = (
+        "*מדיניות פרטיות*\n\n"
+        "קופי - בוט לניהול קופונים מתחייב שלא להשתמש בנתוני הקופונים לצרכים מסחריים או להעבירם לצדדים שלישיים. "
+        "הנתונים מאוחסנים בבסיס נתונים מאובטח בפלטפורמת AWS ומוגנים באמצעים טכניים מתקדמים.\n\n"
+        "עם זאת, הבוט עשוי להשתמש בנתונים סטטיסטיים אנונימיים (ללא פרטים מזהים או קודי קופונים) לצורך שיפור השירות, ניתוח מגמות ופיתוח תכונות עתידיות."
+    )
+    return {
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {
+                "text": privacy_text
+            },
+            "footer": {
+                "text": "אחרי קריאת המדיניות, לחץ על מסכים"
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": config.BUTTON_AGREE,
+                            "title": "✅ מסכים"
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+def format_commands_list():
+    """Format the list of available commands after registration."""
+    commands_text = (
+        "*הפקודות הזמינות:*\n\n"
+        "📋 */list* או *!* - הצג את רשימת הקופונים שלך\n"
+        "📅 */list_expiring* - הצג קופונים שעומדים לפוג\n"
+        "👥 */share_list [מספר טלפון]* - שתף רשימת קופונים עם חבר\n"
+        "🚫 */cancel_sharing* - בטל שיתוף רשימה\n"
+        "➕ שלח תמונה, PDF או טקסט של קופון כדי להוסיף אותו\n\n"
+        "תהנה מהשימוש! 😊"
+    )
+    return {
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {
+                "text": commands_text
+            },
+            "footer": {
+                "text": "בחר אפשרות מהירה"
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": config.BUTTON_LIST_COUPONS,
+                            "title": "📋 הצג קופונים שמורים"
+                        }
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": config.BUTTON_SHARE_LIST,
+                            "title": "👥 שיתוף רשימה עם חבר"
+                        }
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": config.BUTTON_HOW_TO_ADD,
+                            "title": "➕ איך להוסיף קופון"
+                        }
+                    }
+                ]
+            }
+        }
+    }
