@@ -564,7 +564,7 @@ def format_categories_list(coupons, shared_coupons, title="🎉 צברת אחל�
                 "text": title
             },
             "body": {
-                "text": f"🎁 איזה יופי! צברת כבר {len(all_coupons)} קופונים 🤑\nרוצה למצוא את המתאימים?\nבחר קטגוריה שמתאימה למה שאתה מחפש 🔍"
+                "text": f"🎁 איזה יופי! צברת כבר {len(all_coupons)} קופונים 🤑\nרוצה למצוא את המתאים לך?\nבחר קטגוריה לפי מה שאתה מחפש 🔍\nאפשר גם לחפש קופון ספציפי — שלח ! ואז את הטקסט לחיפוש, למשל: \"!פיצה\""
             },
             "footer": {
                 "text": "בחר קטגוריה כדי לראות את הקופונים"
@@ -627,6 +627,8 @@ def format_category_coupons_list(coupons, shared_coupons, category):
             code = coupon.get("coupon_code", "-") or "(ללא קוד)"
             value = coupon.get("value") or coupon.get("discount_value") or ""
             desc = (f"{value} - " if value else "") + f"קוד: {code}"
+            line = f"- {RTL}{store}" + (f" - {value}" if value else "") + " 👥 "
+            lines.append(line)
 
             sections[section_idx]["rows"].append({
                 "id": f"{config.BUTTON_COUPON_PREFIX}{coupon.get('client_id')}:{coupon.get('coupon_id')}",
@@ -765,6 +767,7 @@ def format_commands_list():
         "*הפקודות הזמינות:*\n\n"
         "📋 */list* או *!* - הצג את רשימת הקופונים שלך\n"
         "📅 */list_expiring* - הצג קופונים שעומדים לפוג\n"
+        "🔍 *!חיפוש* - חפש קופונים (למשל: !פיצה)\n"
         "👥 */share_list [מספר טלפון]* - שתף רשימת קופונים עם חבר\n"
         "🚫 */cancel_sharing* - בטל שיתוף רשימה\n"
         "➕ שלח תמונה, PDF או טקסט של קופון כדי להוסיף אותו\n\n"
@@ -801,6 +804,37 @@ def format_commands_list():
                         "reply": {
                             "id": config.BUTTON_HOW_TO_ADD,
                             "title": "➕ איך להוסיף קופון"
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+def format_used_coupon_message(coupon_id, coupon_data):
+    """Format a message for a used coupon with option to unmark."""
+    store = coupon_data.get('store', 'חנות לא ידועה') or 'חנות לא ידועה'
+    return {
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {
+                "text": f"הקופון ל- *{store}* קוד: *{coupon_data['coupon_code']}* כבר קיים ברשימה שלך, אבל הוא מסומן כנוצל.\n\nרוצה לבטל את הסימון ולהפעיל אותו מחדש?"
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": f"{config.BUTTON_UNMARK_AS_USED_PREFIX}{coupon_data['client_id']}:{coupon_id}",
+                            "title": "✅ הפעל מחדש"
+                        }
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": f"{config.BUTTON_CANCEL_COUPON_PREFIX}{coupon_id}",
+                            "title": "🗑️ מחק קופון"
                         }
                     }
                 ]

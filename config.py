@@ -16,6 +16,8 @@ FACEBOOK_GRAPH_API_URL = "https://graph.facebook.com/v19.0"
 
 # Gemini API configuration
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_MODEL = "gemini-2.5-flash-lite"
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 # DynamoDB table names
 COUPONS_TABLE = "Coupons"
@@ -37,6 +39,7 @@ STATE_REGISTRATION_PENDING = "registration_pending"
 # Command prefixes
 CMD_LIST = "/list"
 CMD_LIST_SHORT = "!"
+CMD_SEARCH = "!"
 CMD_ADD_SHARED_COUPON = "/add_shared_coupon"
 CMD_SHARE_LIST = "/share_list"
 CMD_CANCEL_SHARING = "/cancel_sharing"
@@ -49,6 +52,7 @@ BUTTON_UPDATE_COUPON_PREFIX = "update_coupon:"
 BUTTON_UPDATE_COUPON_DETAILS_PREFIX = "update_coupon_details:"
 BUTTON_CANCEL_UPDATE_COUPON_PREFIX = "cancel_update_coupon:"
 BUTTON_MARK_AS_USED_PREFIX = "mark_as_used:"
+BUTTON_UNMARK_AS_USED_PREFIX = "unmark_as_used:"
 BUTTON_CANCEL_COUPON_PREFIX = "cancel_coupon:"
 BUTTON_SHARE_COUPON_PREFIX = "share_coupon:"
 BUTTON_CANCEL_SHARE_PREFIX = "cancel_share:"

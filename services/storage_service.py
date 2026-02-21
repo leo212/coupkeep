@@ -105,28 +105,64 @@ def mark_coupon_as_used(client_id, coupon_id):
         ExpressionAttributeValues={':val': "used", ':timestamp': datetime.now().isoformat()})
     print("Coupon marked as used:", coupon_id)
 
-def get_user_coupons(client_id, expiring_soon=False, days=30):
+def get_user_coupons(client_id, expiring_soon=False, days=30, include_used=False):
     """Get all unused coupons for a user. Optionally filter for expiring soon."""
-    filter_expr = Attr('coupon_status').eq('unused')
+    if include_used:
+        filter_expr = None
+    else:
+        filter_expr = Attr('coupon_status').eq('unused')
     
     if expiring_soon:
         now = datetime.now()
         future = now + timedelta(days=days)
-        filter_expr &= Attr('expiration_date').gt(now.isoformat()) & Attr('expiration_date').lte(future.isoformat())
+        expiring_filter = Attr('expiration_date').gt(now.isoformat()) & Attr('expiration_date').lte(future.isoformat())
+        filter_expr = filter_expr & expiring_filter if filter_expr else expiring_filter
     
-    response = table.query(
-        KeyConditionExpression=Key('client_id').eq(client_id),
-        FilterExpression=filter_expr
-    )
+    query_params = {'KeyConditionExpression': Key('client_id').eq(client_id)}
+    if filter_expr:
+        query_params['FilterExpression'] = filter_expr
+    
+    response = table.query(**query_params)
     return response.get('Items', [])
 
+def find_coupon_by_code(client_id, coupon_code):
+    """Find a coupon by its code for a specific user."""
+    response = table.query(
+        KeyConditionExpression=Key('client_id').eq(client_id),
+        FilterExpression=Attr('coupon_code').eq(coupon_code)
+    )
+    items = response.get('Items', [])
+    return items[0] if items else None
+
+def unmark_coupon_as_used(client_id, coupon_id):
+    """Unmark a coupon as used."""
+    table.update_item(
+        Key={'client_id': client_id, 'coupon_id': coupon_id},
+        UpdateExpression='SET coupon_status = :val REMOVE used_timestamp',
+        ExpressionAttributeValues={':val': 'unused'}
+    )
+    print("Coupon unmarked as used:", coupon_id)
+
 def get_coupon_by_code(client_id, coupon_id):
-    """Get a specific coupon by its ID."""
+    """Get a specific coupon by its ID, including shared coupons."""
     print("Getting coupon by code:", client_id, coupon_id)
+    # First try to get the user's own coupon
     response = table.get_item(
         Key={"client_id": client_id, "coupon_id": coupon_id}
     )
-    return response.get("Item")
+    coupon = response.get("Item")
+    
+    if coupon:
+        return coupon
+    
+    # If not found, check if it's a shared coupon
+    response = table.query(
+        IndexName='shared_with-index',
+        KeyConditionExpression=Key('shared_with').eq(client_id),
+        FilterExpression=Attr('coupon_id').eq(coupon_id)
+    )
+    items = response.get('Items', [])
+    return items[0] if items else None
 
 def get_shared_coupon(share_token):
     """Get a coupon that has been shared using a token."""
