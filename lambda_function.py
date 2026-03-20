@@ -90,6 +90,13 @@ def show_list_of_coupons(from_number, expiring_soon=False):
     
     whatsapp.send_whatsapp_message(from_number, formatted_list, is_interactive=True)
 
+def send_web_cta(from_number):
+    """Send the web UI CTA to an already registered user."""
+    web_url = auth_service.get_web_url(from_number)
+    if web_url:
+        formatted = response_formatter.format_web_link_message(web_url)
+        whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
+
 def handle_text_message(msg, from_number):
     """
     Handles text messages from users, including commands and coupon text.
@@ -145,6 +152,7 @@ def handle_text_message(msg, from_number):
         return True
     elif msg_text == config.CMD_LIST or msg_text == config.CMD_LIST_SHORT:                            
         show_list_of_coupons(from_number)
+        send_web_cta(from_number)
         return True
     elif msg_text == "/list_expiring":
         show_list_of_coupons(from_number, expiring_soon=True)
@@ -190,6 +198,7 @@ def handle_text_message(msg, from_number):
         coupons = storage_service.get_user_coupons(from_number)
         formatted = response_formatter.format_welcome_message(new_user=(len(coupons) == 0))
         whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
+        send_web_cta(from_number)
         return True
         
     # Handle regular text (potential coupon)
@@ -364,12 +373,14 @@ def handle_interactive_message(msg, from_number):
             if user_state == config.STATE_REGISTRATION_PENDING:
                 # Agreeing to terms and privacy, complete registration
                 storage_service.set_user_state(from_number, config.STATE_IDLE)
-                formatted = response_formatter.format_commands_list()
+                web_url = auth_service.get_web_url(from_number)
+                formatted = response_formatter.format_commands_list(web_url)
                 whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
             return True
         
         if button_id == config.BUTTON_LIST_COUPONS:
             show_list_of_coupons(from_number)
+            send_web_cta(from_number)
             return True
         elif button_id == config.BUTTON_SHARE_LIST:
             share_payload = response_formatter.format_share_list_interactive(from_number)
@@ -392,6 +403,7 @@ def handle_interactive_message(msg, from_number):
                 "\n"
                 "תהנה מהשימוש! 😊"            )
             whatsapp.send_whatsapp_message(from_number, how_to_add_message)
+            send_web_cta(from_number)
             return True
         elif button_id.startswith(config.BUTTON_UPDATE_COUPON_PREFIX):
             coupon_id = button_id.split(":")[1]

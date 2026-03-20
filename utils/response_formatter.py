@@ -761,53 +761,33 @@ def format_privacy_policy():
         }
     }
 
-def format_commands_list():
-    """Format the list of available commands after registration."""
+def format_commands_list(web_url):
+    """Format the post-terms onboarding message with a web CTA."""
     commands_text = (
-        "*הפקודות הזמינות:*\n\n"
+        "*מעולה, אפשר להתחיל! 🎉*\n\n"
+        "פתח את קופי בדפדפן לניהול מהיר ונוח של כל הקופונים.\n\n"
+        "*פקודות זמינות בצ'אט:*\n"
         "📋 */list* או *!* - הצג את רשימת הקופונים שלך\n"
         "📅 */list_expiring* - הצג קופונים שעומדים לפוג\n"
         "🔍 *!* - חפש קופונים (למשל: !פיצה)\n"
         "👥 */share_list [מספר טלפון]* - שתף רשימת קופונים עם חבר\n"
         "🚫 */cancel_sharing* - בטל שיתוף רשימה\n"
-        "🌐 */web* - פתח את רשימת הקופונים בדפדפן\n"
         "➕ שלח תמונה, PDF או טקסט של קופון כדי להוסיף אותו\n\n"
         "תהנה מהשימוש! 😊"
     )
     return {
         "type": "interactive",
         "interactive": {
-            "type": "button",
+            "type": "cta_url",
             "body": {
                 "text": commands_text
             },
-            "footer": {
-                "text": "בחר אפשרות מהירה"
-            },
             "action": {
-                "buttons": [
-                    {
-                        "type": "reply",
-                        "reply": {
-                            "id": config.BUTTON_LIST_COUPONS,
-                            "title": "📋 הצג קופונים שמורים"
-                        }
-                    },
-                    {
-                        "type": "reply",
-                        "reply": {
-                            "id": config.BUTTON_SHARE_LIST,
-                            "title": "👥 שיתוף רשימה עם חבר"
-                        }
-                    },
-                    {
-                        "type": "reply",
-                        "reply": {
-                            "id": config.BUTTON_HOW_TO_ADD,
-                            "title": "❔ איך להשתמש בקופי"
-                        }
-                    }
-                ]
+                "name": "cta_url",
+                "parameters": {
+                    "display_text": "🌐 פתח את קופי בדפדפן",
+                    "url": web_url
+                }
             }
         }
     }
