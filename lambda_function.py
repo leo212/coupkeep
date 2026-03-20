@@ -11,6 +11,8 @@ import config
 import services.coupon_parser as coupon_parser
 import services.whatsapp as whatsapp
 import services.storage_service as storage_service
+import services.auth_service as auth_service
+import services.rest_handler as rest_handler
 import utils.response_formatter as response_formatter
 from datetime import datetime, timedelta
 
@@ -113,7 +115,12 @@ def handle_text_message(msg, from_number):
         return True
     
     # Handle commands
-    if msg_text.startswith(config.CMD_SEARCH) and len(msg_text) > 1:
+    if msg_text == config.CMD_WEB:
+        web_url = auth_service.get_web_url(from_number)
+        formatted = response_formatter.format_web_link_message(web_url)
+        whatsapp.send_whatsapp_message(from_number, formatted, is_interactive=True)
+        return True
+    elif msg_text.startswith(config.CMD_SEARCH) and len(msg_text) > 1:
         # Search coupons
         search_query = msg_text[1:].strip()
         whatsapp.send_reaction(from_number, msg_id, config.REACTION_PROCESSING)
@@ -376,10 +383,14 @@ def handle_interactive_message(msg, from_number):
                 "3️⃣ *טקסט* עם פרטי הקופון\n\n"
                 "אני אזהה אוטומטית את הפרטים ואשמור אותו עבורך! 📱✨\n\n"
                 "*פקודות נוספות:*\n"
-                "📋 *!* או */list* - הצג רשימת קופונים\n"
-                "🔍 *!חיפוש* - חפש קופונים (למשל: !פיצה)\n"
-                "👥 */share_list* - שתף רשימה עם חבר"
-            )
+                "📋 */list* או *!* - הצג את רשימת הקופונים שלך\n"
+                "📅 */list_expiring* - הצג קופונים שעומדים לפוג\n"
+                "🔍 *!* - חפש קופונים (למשל: !פיצה)\n"
+                "👥 */share_list [מספר טלפון]* - שתף רשימת קופונים עם חבר\n"
+                "🚫 */cancel_sharing* - בטל שיתוף רשימה\n"
+                "🌐 */web* - פתח את רשימת הקופונים בדפדפן\n"
+                "\n"
+                "תהנה מהשימוש! 😊"            )
             whatsapp.send_whatsapp_message(from_number, how_to_add_message)
             return True
         elif button_id.startswith(config.BUTTON_UPDATE_COUPON_PREFIX):
@@ -514,7 +525,7 @@ def handle_button_message(msg, from_number):
 
 def lambda_handler(event, context):
     """
-    AWS Lambda handler function for processing WhatsApp webhook events.
+    AWS Lambda handler function for processing WhatsApp webhook events and REST API.
     
     Args:
         event: AWS Lambda event object
@@ -527,7 +538,13 @@ def lambda_handler(event, context):
     print(json.dumps(event))
 
     method = event.get("requestContext", {}).get("http", {}).get("method", "")
+    path = event.get("rawPath", "")
 
+    # Check if this is a REST API request
+    if path.startswith('/default/api/'):
+        return rest_handler.handle_rest_api(event)
+
+    # WhatsApp webhook handling
     if method == "GET":
         # Meta webhook verification
         params = event.get("queryStringParameters", {})                

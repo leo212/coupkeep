@@ -390,7 +390,7 @@ def format_welcome_message(new_user=False):
                         "type": "reply",
                         "reply": {
                             "id": config.BUTTON_HOW_TO_ADD,
-                            "title": "➕ איך להוסיף קופון"
+                            "title": "❔ איך להשתמש בקופי"
                         }
                     }
                 ]
@@ -767,9 +767,10 @@ def format_commands_list():
         "*הפקודות הזמינות:*\n\n"
         "📋 */list* או *!* - הצג את רשימת הקופונים שלך\n"
         "📅 */list_expiring* - הצג קופונים שעומדים לפוג\n"
-        "🔍 *!חיפוש* - חפש קופונים (למשל: !פיצה)\n"
+        "🔍 *!* - חפש קופונים (למשל: !פיצה)\n"
         "👥 */share_list [מספר טלפון]* - שתף רשימת קופונים עם חבר\n"
         "🚫 */cancel_sharing* - בטל שיתוף רשימה\n"
+        "🌐 */web* - פתח את רשימת הקופונים בדפדפן\n"
         "➕ שלח תמונה, PDF או טקסט של קופון כדי להוסיף אותו\n\n"
         "תהנה מהשימוש! 😊"
     )
@@ -803,7 +804,7 @@ def format_commands_list():
                         "type": "reply",
                         "reply": {
                             "id": config.BUTTON_HOW_TO_ADD,
-                            "title": "➕ איך להוסיף קופון"
+                            "title": "❔ איך להשתמש בקופי"
                         }
                     }
                 ]
@@ -838,6 +839,25 @@ def format_used_coupon_message(coupon_id, coupon_data):
                         }
                     }
                 ]
+            }
+        }
+    }
+
+def format_web_link_message(web_url):
+    """Format an interactive message with external link to web app."""
+    return {
+        "type": "interactive",
+        "interactive": {
+            "type": "cta_url",
+            "body": {
+                "text": "*תצוגה מלאה ונוחה בדפדפן*\n\nלצפייה וניהול נוחים יותר — פתח את \"קופי\" בדפדפן 📋✨"
+            },
+            "action": {
+                "name": "cta_url",
+                "parameters": {
+                    "display_text": "פתח בדפדפן",
+                    "url": web_url
+                }
             }
         }
     }

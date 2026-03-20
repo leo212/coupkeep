@@ -19,6 +19,12 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_MODEL = "gemini-2.5-flash-lite"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
+# Web interface configuration
+WEB_BASE_URL = os.environ.get("WEB_BASE_URL", "https://coupi.roymam.com")
+
+# Command prefixes
+CMD_WEB = "/web"
+
 # DynamoDB table names
 COUPONS_TABLE = "Coupons"
 PAIRING_TABLE = "Pairing"
