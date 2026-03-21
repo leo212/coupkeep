@@ -40,6 +40,7 @@ REACTION_NONE = ""
 # User states
 STATE_IDLE = "idle"
 STATE_UPDATE_COUPON_PREFIX = "update_coupon:"
+STATE_PENDING_UPDATE_OPTION_SELECTION = "pending_update_option_selection:"
 STATE_REGISTRATION_PENDING = "registration_pending"
 
 # Command prefixes

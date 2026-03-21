@@ -2,12 +2,61 @@ import boto3
 from boto3.dynamodb.conditions import Key, Attr
 from datetime import datetime, timedelta
 import uuid
+import re
+from decimal import Decimal, InvalidOperation
 import config
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(config.COUPONS_TABLE)
 pairing_table = dynamodb.Table(config.PAIRING_TABLE)
 user_state_table = dynamodb.Table(config.USER_STATE_TABLE)
+
+
+def parse_amount(value):
+    """Extract a numeric amount from free-form value strings like '100₪', '$50', or '100.5 ש"ח'."""
+    if value is None:
+        return None
+
+    if isinstance(value, (int, float, Decimal)):
+        return float(value)
+
+    # Remove currency symbols and common Hebrew currency strings to isolate the number
+    text = str(value).strip().replace(",", ".")
+    text = text.replace("₪", "").replace("$", "").replace("ש\"ח", "").replace("שח", "")
+    
+    # Match first floating point number
+    match = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not match:
+        return None
+
+    try:
+        return float(match.group())
+    except ValueError:
+        return None
+
+
+def to_decimal(value, default=Decimal('0')):
+    """Convert numeric-like input to Decimal for DynamoDB writes."""
+    if value is None:
+        return default
+
+    if isinstance(value, Decimal):
+        return value
+
+    if isinstance(value, int):
+        return Decimal(value)
+
+    if isinstance(value, float):
+        return Decimal(str(value))
+
+    amount = parse_amount(value)
+    if amount is None:
+        return default
+
+    try:
+        return Decimal(str(amount))
+    except (InvalidOperation, ValueError):
+        return default
 
 def store_new_coupon(client_id, coupon_id, msg_id, coupon_data):
     """Store a new coupon in the database and share it with paired users if applicable."""
@@ -25,6 +74,7 @@ def store_new_coupon(client_id, coupon_id, msg_id, coupon_data):
         'category': coupon_data.get('category'),
         'misc': coupon_data.get('misc'),
         'coupon_status': 'unused',
+        'used': 0,
         'timestamp': datetime.now().isoformat()
     }
 
@@ -56,7 +106,8 @@ def update_coupon_details(coupon_data, updated_fields):
         'terms': 'terms_and_conditions',
         '#url': 'url',
         'misc': 'misc',
-        'category': 'category'
+        'category': 'category',
+        'used': 'used'
     }
 
     # Full mapping of aliases to real DynamoDB attribute names
@@ -70,8 +121,12 @@ def update_coupon_details(coupon_data, updated_fields):
         if update_key in updated_fields:
             placeholder = f":{db_field.strip('#')}"
             update_expressions.append(f"{db_field} = {placeholder}")
-            expression_attribute_values[placeholder] = updated_fields[update_key]
-            coupon_data[update_key] = updated_fields[update_key]
+            field_value = updated_fields[update_key]
+            if update_key == 'used':
+                field_value = to_decimal(field_value)
+
+            expression_attribute_values[placeholder] = field_value
+            coupon_data[update_key] = field_value
 
             # If the db_field is an alias (starts with #), include it in the attribute names
             if db_field.startswith('#'):
@@ -99,10 +154,19 @@ def update_coupon_details(coupon_data, updated_fields):
 
 def mark_coupon_as_used(client_id, coupon_id):
     """Mark a coupon as used."""
+    coupon = get_coupon_by_code(client_id, coupon_id)
+    full_used = parse_amount(coupon.get('value')) if coupon else None
+
+    expression = 'SET coupon_status = :val, used_timestamp = :timestamp'
+    expression_values = {':val': "used", ':timestamp': datetime.now().isoformat()}
+    if full_used is not None:
+        expression += ', used = :used'
+        expression_values[':used'] = to_decimal(full_used)
+
     table.update_item(
         Key={'client_id': client_id, 'coupon_id': coupon_id},
-        UpdateExpression='SET coupon_status = :val, used_timestamp = :timestamp',
-        ExpressionAttributeValues={':val': "used", ':timestamp': datetime.now().isoformat()})
+        UpdateExpression=expression,
+        ExpressionAttributeValues=expression_values)
     print("Coupon marked as used:", coupon_id)
 
 def get_user_coupons(client_id, expiring_soon=False, days=30, include_used=False):
@@ -138,10 +202,35 @@ def unmark_coupon_as_used(client_id, coupon_id):
     """Unmark a coupon as used."""
     table.update_item(
         Key={'client_id': client_id, 'coupon_id': coupon_id},
-        UpdateExpression='SET coupon_status = :val REMOVE used_timestamp',
-        ExpressionAttributeValues={':val': 'unused'}
+        UpdateExpression='SET coupon_status = :val, used = :used REMOVE used_timestamp',
+        ExpressionAttributeValues={':val': 'unused', ':used': 0}
     )
     print("Coupon unmarked as used:", coupon_id)
+
+
+def update_coupon_used_value(client_id, coupon_id, amount):
+    """Increase coupon used amount by `amount`, clamped to coupon value if numeric."""
+    coupon = get_coupon_by_code(client_id, coupon_id)
+    if not coupon:
+        return None
+
+    current_used = parse_amount(coupon.get('used')) or 0.0
+    added = parse_amount(amount) or 0.0
+    new_used = current_used + max(added, 0.0)
+
+    # Check value field which might have currency symbols
+    value_amount = parse_amount(coupon.get('value'))
+    if value_amount is not None:
+        new_used = min(new_used, value_amount)
+
+    table.update_item(
+        Key={'client_id': client_id, 'coupon_id': coupon_id},
+        UpdateExpression='SET used = :used',
+        ExpressionAttributeValues={':used': to_decimal(new_used)}
+    )
+
+    coupon['used'] = new_used
+    return coupon
 
 def get_coupon_by_code(client_id, coupon_id):
     """Get a specific coupon by its ID, including shared coupons."""
@@ -210,20 +299,24 @@ def cancel_coupon_sharing(client_id, coupon_id):
     )
     print("Coupon sharing cancelled:", coupon_id, client_id)
 
-def get_shared_coupons(client_id, expiring_soon=False, days=30):
+def get_shared_coupons(client_id, expiring_soon=False, days=30, include_used=False):
     """Get all coupons shared with a user. Optionally filter for expiring soon."""
-    filter_expr = Attr('coupon_status').eq('unused')
+    filter_expr = None if include_used else Attr('coupon_status').eq('unused')
     
     if expiring_soon:
         now = datetime.now()
         future = now + timedelta(days=days)
-        filter_expr &= Attr('expiration_date').gt(now.isoformat()) & Attr('expiration_date').lte(future.isoformat())
+        expiring_filter = Attr('expiration_date').gt(now.isoformat()) & Attr('expiration_date').lte(future.isoformat())
+        filter_expr = filter_expr & expiring_filter if filter_expr else expiring_filter
     
-    response = table.query(
-        IndexName='shared_with-index',
-        KeyConditionExpression=Key('shared_with').eq(client_id),
-        FilterExpression=filter_expr
-    )
+    query_params = {
+        'IndexName': 'shared_with-index',
+        'KeyConditionExpression': Key('shared_with').eq(client_id)
+    }
+    if filter_expr:
+        query_params['FilterExpression'] = filter_expr
+
+    response = table.query(**query_params)
     items = response.get('Items', [])
     return items
 
@@ -296,6 +389,6 @@ def save_coupon_to_db_without_code(client_id, coupon_id):
     """Save a coupon without a code."""
     table.update_item(
         Key={'client_id': client_id, 'coupon_id': coupon_id},
-        UpdateExpression='SET coupon_status = :val, coupon_code = :code',
-        ExpressionAttributeValues={':val': "unused", ':code' : None})
+        UpdateExpression='SET coupon_status = :val, coupon_code = :code, used = :used',
+        ExpressionAttributeValues={':val': "unused", ':code' : None, ':used': 0})
     print("Coupon saved:", coupon_id)

@@ -1,6 +1,57 @@
 import urllib.parse
 import config
 from datetime import datetime
+import re
+
+
+def parse_amount(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    # Clean text to handle currency symbols
+    text = str(value).strip().replace(",", ".")
+    text = text.replace("₪", "").replace("$", "").replace("ש\"ח", "").replace("שח", "")
+    
+    match = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not match:
+        return None
+    try:
+        return float(match.group())
+    except ValueError:
+        return None
+
+
+def format_amount(amount):
+    if amount is None:
+        return ""
+    if float(amount).is_integer():
+        return str(int(amount))
+    return f"{amount:.2f}".rstrip('0').rstrip('.')
+
+
+def build_remaining_display(coupon_data, compact=False):
+    """Return a remaining/value text only when used > 0."""
+    used = parse_amount(coupon_data.get('used')) or 0
+    if used <= 0:
+        return None
+
+    value_text = coupon_data.get('value')
+    if not value_text:
+        return None
+
+    remaining = coupon_data.get('remaining')
+    if remaining is None:
+        value_amount = parse_amount(value_text)
+        if value_amount is None:
+            return None
+        remaining = max(value_amount - used, 0)
+
+    remaining_text = format_amount(float(remaining))
+    value_display = str(value_text)
+    separator = " מתוך " if compact else "/"
+    return f"{remaining_text}{separator}{value_display}"
 
 def get_category_name(category):
     """Get the full name of a category based on its short name."""
@@ -49,6 +100,9 @@ def format_response(coupon_id, coupon_data, is_new, is_shared=False):
         body_lines.append(f"💸 *הנחה:* {coupon_data['discount_value']}")
     if coupon_data.get("value"):
         body_lines.append(f"🎁 *ערך:* {coupon_data['value']}")
+        remaining_display = build_remaining_display(coupon_data, compact=False)
+        if remaining_display:
+            body_lines.append(f"🧾 *נותר לניצול:* {remaining_display}")
     if coupon_data.get("terms"):
         body_lines.append(f"📜 *תנאים:* {coupon_data['terms']}")
     if coupon_data.get("url"):
@@ -286,7 +340,7 @@ def format_coupon_list_inline(coupons, shared_coupons):
             lines.append(f"{category_emoji} *{category_name}*")
             for coupon in coupons:
                 store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
-                value = coupon.get("value") or coupon.get("discount_value") or ""
+                value = build_remaining_display(coupon, compact=True) or coupon.get("value") or coupon.get("discount_value") or ""
                 line = f"- {RTL}{store}" + (f" - {value}" if value else "")
                 lines.append(line)    
             lines.append("")  # Add a blank line after each category
@@ -308,7 +362,7 @@ def format_coupons_list_interactive(coupons, shared_coupons, title="📋 רשי�
     for idx, coupon in enumerate(coupons[:max_coupons], start=1):
         store = coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
         code = coupon.get("coupon_code", "-") or "(ללא קוד)"
-        value = coupon.get("value") or coupon.get("discount_value") or ""
+        value = build_remaining_display(coupon, compact=True) or coupon.get("value") or coupon.get("discount_value") or ""
         desc = (f"{value} - " if value else "") + f"קוד: {code}"
         
         sections[0]["rows"].append({
@@ -324,7 +378,7 @@ def format_coupons_list_interactive(coupons, shared_coupons, title="📋 רשי�
         for idx, shared_coupon in enumerate(shared_coupons[:max_coupons - len(sections[0]["rows"])], start=1):
             store = shared_coupon.get("store", "חנות לא ידועה") or "חנות לא ידועה"
             code = shared_coupon.get("coupon_code", "-") or "(ללא קוד)"
-            value = shared_coupon.get("value") or shared_coupon.get("discount_value") or ""
+            value = build_remaining_display(shared_coupon, compact=True) or shared_coupon.get("value") or shared_coupon.get("discount_value") or ""
             desc = (f"{value} - " if value else "") + f"קוד: {code}"
 
             sections[1]["rows"].append({
@@ -838,6 +892,68 @@ def format_web_link_message(web_url):
                     "display_text": "פתח בדפדפן",
                     "url": web_url
                 }
+            }
+        }
+    }
+
+def format_update_options_interactive(message, options):
+    """Format ambiguous update options as an interactive list.
+    
+    Constraints:
+    - Title: max 24 characters
+    - Body: max 72 characters
+    - ID: max 200 characters per option
+    """
+    # Truncate message to fit body limit (72 chars)
+    body_text = message[:72] if len(message) > 72 else message
+    
+    # Format options as rows
+    rows = []
+    for idx, option in enumerate(options, 1):
+        # Get title and description from option, with fallbacks
+        title = option.get('title', f'אפשרות {idx}')
+        description = option.get('description', '')
+        
+        # Ensure title fits within 24 chars
+        if len(title) > 24:
+            title = title[:21] + "..."
+        
+        # Ensure description fits within 72 chars
+        if len(description) > 72:
+            description = description[:69] + "..."
+        
+        # Create unique ID: "update_opt_" + index
+        option_id = f"update_opt_{idx}"
+        
+        row = {
+            "id": option_id,
+            "title": title,
+            "description": description
+        }
+        rows.append(row)
+    
+    return {
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "header": {
+                "type": "text",
+                "text": "בחר אפשרות"[:24]  # Title max 24 chars
+            },
+            "body": {
+                "text": body_text
+            },
+            "footer": {
+                "text": "או שלח הודעה חדשה"
+            },
+            "action": {
+                "button": "בחר אפשרות",
+                "sections": [
+                    {
+                        "title": "אפשרויות עדכון",
+                        "rows": rows
+                    }
+                ]
             }
         }
     }

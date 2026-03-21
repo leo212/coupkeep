@@ -4,10 +4,17 @@ import re
 import base64
 import requests
 from datetime import datetime
+from decimal import Decimal
 import fitz  # PyMuPDF
 from PIL import Image
 import io
 import config
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super(DecimalEncoder, self).default(obj)
 
 http = urllib3.PoolManager()
 
@@ -81,65 +88,126 @@ def parse_coupon_details(user_text: str) -> dict:
         return {"valid": False}
 
 def parse_update_request_details(coupon_data, user_text):
-    """Parse update request details for an existing coupon."""
+    """Parse update request details for an existing coupon with disambiguation support."""
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": config.GEMINI_API_KEY
     }
 
-    prompt = f"""Current year is {datetime.now().year}. You are a coupon update assistant. Given an existing coupon and a user update request, update the coupon fields accordingly.
+    current_year = datetime.now().year
+    prompt = f"""Current year is {current_year}. You are a professional Hebrew coupon update assistant. 
+Given an existing coupon and a user update request (in Hebrew), your task is to identify what fields the user wants to change.
 
-The original coupon data is:
-\"\"\"
-{json.dumps(coupon_data, ensure_ascii=False, indent=2)}
-\"\"\"
+The original coupon data:
+```json
+{json.dumps(coupon_data, ensure_ascii=False, indent=2, cls=DecimalEncoder)}
+```
 
-Here is the user message:
-\"\"\"
-{user_text}
-\"\"\"
+User message: "{user_text}"
 
-Please return ONLY the fields the user wants to change, in the following JSON format. If the user didn't ask to change something, do not include that field at all.
-Please always return a field "valid" which indicates if the user request was a valid update request for the coupon.
-if the request is not valid - add also "examples" field which contains an array for two examples for valid user text requests in Hebrew.
+SUPPORTED FIELDS FOR UPDATE - You can ONLY return these fields:
+- "store": Store/brand name (string)
+- "coupon_code": Coupon code identifier (string)
+- "expiration_date": Expiration date in ISO8601 format (YYYY-MM-DD)
+- "discount_value": Discount amount or percentage (numeric or string)
+- "value": Coupon monetary value (numeric)
+- "notes": Additional notes or terms (string)
+- "used": Amount already used (numeric). Special: if user asks to update "remaining", calculate used = value - remaining
+- "category": Coupon category - MUST be one of: food_and_drinks, clothing_and_fashion, electronics, beauty_and_health, home_and_garden, travel, entertainment, kids_and_babies, sports_and_outdoors, other (string)
+- "terms_and_conditions": Restrictions or conditions (string)
+- "url": Associated website URL (string)
+- "misc": Other important information (string)
 
-Expected fields (only include fields the user requested to change):
+CRITICAL CONSTRAINT:
+- NEVER return fields not in the list above
+- NEVER return "remaining" - convert remaining requests to "used" using formula: used = value - remaining_requested
+- Example: If value=1000 and user says "עדכן את הנותר ל-300", return {{"used": 700}}
+
+INSTRUCTIONS: You MUST return ONLY one of two statuses: "success" or "ambiguous". NEVER return "invalid".
+
+SCENARIOS:
+1. CLEAR REQUEST: Single unambiguous interpretation:
+   - Return "status": "success"
+   - Return "update_fields": {{ ... ONLY the fields the user requested to change ... }}
+   - Return "summary": Short Hebrew confirmation (e.g., "עודכן ערך הקופון ל-500 ש\"ח")
+   
+2. AMBIGUOUS REQUEST: Unclear, multiple meanings, or nonsensical:
+   - Return "status": "ambiguous"
+   - Return "options": Exactly 3 possible interpretations. Each option MUST have:
+     - "title": Short action title in Hebrew (≤20 chars)
+     - "description": Detailed explanation in Hebrew (≤60 chars)
+     - "update_fields": {{ ... ONLY supported fields this interpretation changes ... }}
+   - Always provide 3 sensible suggestions based on the coupon's actual fields
+
+Important:
+- Handle Hebrew and currency symbols (₪, $, ש\"ח)
+- Only include fields that were explicitly requested by the user
+- For "remaining" requests, convert to "used": used = value - remaining_requested
+- NEVER suggest updating fields that don't exist in the original coupon
+- Output ONLY valid JSON
+
+JSON Schema:
 {{
-  "store": "new_store_name",
-  "coupon_code": "new_code",
-  "expiration_date": "new date in ISO8601",
-  "discount_value": "new discount",
-  "value": "new_value",
-  "terms_and_conditions": "updated_terms",
-  "url": "new_url",
-  "misc": "other_info",
-  "category": "new_category" # one of ["food_and_drinks", "clothing_and_fashion", "electronics", "beauty_and_health", "home_and_garden", "travel", "entertainment", "kids_and_babies", "sports_and_outdoors", "other"]
+  "status": "success" | "ambiguous",
+  "update_fields": {{ ... }}, // only for success
+  "summary": "Hebrew summary", // only for success
+  "options": [ {{ "title": "...", "description": "...", "update_fields": {{ ... }} }} ] // exactly 3 for ambiguous
 }}"""
 
     body = {
-        "contents": [
-            {
-                "parts": [{"text": prompt}],
-                "role": "user"
-            }
-        ]
-    }    
+        "contents": [{"parts": [{"text": prompt}], "role": "user"}]
+    }
 
     try:
-        response = http.request("POST", config.GEMINI_API_URL, headers=headers, body=json.dumps(body).encode("utf-8"))
-        if response.status != 200:
-            print("Gemini API Error:", response.status)
-            print(response.data.decode())
-            return {"valid": False}
-
-        raw_response = response.data.decode("utf-8")
-        result = json.loads(raw_response)
+        response = requests.post(config.GEMINI_API_URL, headers=headers, json=body)
+        response.raise_for_status()
+        
+        result = response.json()
         response_text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-
         cleaned_json = re.sub(r"^```json|```$", "", response_text.strip(), flags=re.MULTILINE).strip()
-        print("Gemini API response:", json.dumps(cleaned_json, ensure_ascii=False))
-        return json.loads(cleaned_json)
+        data = json.loads(cleaned_json)
+        
+        # Backward compatibility for existing logic that expects 'valid' and raw fields
+        if data.get("status") == "success":
+            data["valid"] = True
+            data.update(data.get("update_fields", {}))
+        elif data.get("status") == "ambiguous":
+            data["valid"] = False
+            # We'll handle 'options' in coupon_service
+        else:
+            data["valid"] = False
+            
+        return data
     except Exception as e:
+        print("Error during Gemini update parse:", e)
+        return {"valid": False, "status": "error"}
+
+def generate_update_example(coupon_data):
+    """Generate a tailored Hebrew example for updating a specific coupon."""
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": config.GEMINI_API_KEY
+    }
+
+    prompt = f"""Given this coupon:
+{json.dumps(coupon_data, ensure_ascii=False, indent=2, cls=DecimalEncoder)}
+
+Generate ONE short, natural Hebrew sentence that a user might say to update this specific coupon. 
+Focus on something relevant (e.g. updating the store name, the expiration date, or the value).
+Return ONLY the Hebrew sentence text. No quotes, no preamble."""
+
+    body = {
+        "contents": [{"parts": [{"text": prompt}], "role": "user"}]
+    }
+
+    try:
+        response = requests.post(config.GEMINI_API_URL, headers=headers, json=body)
+        response.raise_for_status()
+        result = response.json()
+        example = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+        return example
+    except Exception:
+        return "עדכן את תוקף הקופון ל-31.12"
         print("Error during Gemini API call:", e)
         return {"valid": False}
 

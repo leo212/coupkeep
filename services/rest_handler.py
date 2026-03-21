@@ -27,8 +27,8 @@ def make_json_response(status_code, body_obj):
         'headers': {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type,X-Api-Key'
+            'Access-Control-Allow-Methods': '*',
+            'Access-Control-Allow-Headers': '*'
         },
         'body': body_str
     }
@@ -66,7 +66,7 @@ def handle_rest_api(event):
         return create_coupon(client_id, body)
     elif path.startswith('/default/api/coupons/') and method == 'GET':
         coupon_id = path.split('/')[-1]
-        return get_coupon(client_id, coupon_id)
+        return get_coupon(client_id, coupon_id, event)
     elif path.startswith('/default/api/coupons/') and method == 'PUT':
         coupon_id = path.split('/')[-1]
         return update_coupon(client_id, coupon_id, body)
@@ -78,6 +78,9 @@ def handle_rest_api(event):
     elif path.startswith('/default/api/coupons/') and path.endswith('/mark-used') and method == 'POST':
         coupon_id = path.split('/')[-2]
         return mark_used(client_id, coupon_id)
+    elif path.startswith('/default/api/coupons/') and path.endswith('/use') and method == 'POST':
+        coupon_id = path.split('/')[-2]
+        return use_coupon_amount(client_id, coupon_id, body)
     elif path.startswith('/default/api/coupons/') and path.endswith('/unmark-used') and method == 'POST':
         coupon_id = path.split('/')[-2]
         return unmark_used(client_id, coupon_id)
@@ -90,7 +93,13 @@ def handle_rest_api(event):
     return make_json_response(404, {'error': 'Not found'})
 
 def get_coupons(client_id, params):
-    result = coupon_service.list_coupons(client_id, params.get('expiring_soon') == 'true', params.get('include_shared', 'true') == 'true')
+    params = params or {}
+    result = coupon_service.list_coupons(
+        client_id,
+        params.get('expiring_soon') == 'true',
+        params.get('include_shared', 'true') == 'true',
+        params.get('include_used', 'false') == 'true'
+    )
     return make_json_response(200, result)
 
 def create_coupon(client_id, body):
@@ -103,19 +112,29 @@ def create_coupon(client_id, body):
     status = 201 if isinstance(result, dict) and result.get('status') == 'created' else 200
     return make_json_response(status, result)
 
-def get_coupon(client_id, coupon_id):
-    coupon = coupon_service.get_coupon(client_id, coupon_id)
+def get_coupon(client_id, coupon_id, event=None):
+    include_example = False
+    if event and event.get('queryStringParameters'):
+        include_example = event['queryStringParameters'].get('include_example') == 'true'
+    
+    coupon = coupon_service.get_coupon(client_id, coupon_id, include_example=include_example)
     if not coupon:
         return make_json_response(404, {'error': 'Coupon not found'})
     return make_json_response(200, coupon)
 
 def update_coupon(client_id, coupon_id, body):
-    if 'text' not in body:
-        return make_json_response(400, {'error': 'Missing text field'})
-    result = coupon_service.update_coupon(client_id, coupon_id, body['text'])
+    if 'fields' in body:
+        # Direct field update (used for disambiguation options)
+        result = coupon_service.update_fields(client_id, coupon_id, body['fields'])
+    elif 'text' in body:
+        # Natural language update
+        result = coupon_service.update_coupon(client_id, coupon_id, body['text'])
+    else:
+        return make_json_response(400, {'error': 'Missing text or fields'})
+    
     if result['status'] == 'not_found':
         return make_json_response(404, {'error': 'Coupon not found'})
-    elif result['status'] == 'invalid':
+    elif result['status'] in ['invalid', 'ambiguous']:
         return make_json_response(400, result)
     return make_json_response(200, result)
 
@@ -139,6 +158,17 @@ def mark_used(client_id, coupon_id):
 
 def unmark_used(client_id, coupon_id):
     result = coupon_service.unmark_coupon_used(client_id, coupon_id)
+    if result['status'] == 'not_found':
+        return make_json_response(404, {'error': 'Coupon not found'})
+    return make_json_response(200, result)
+
+
+def use_coupon_amount(client_id, coupon_id, body):
+    amount = body.get('amount')
+    if amount is None:
+        return make_json_response(400, {'error': 'Missing amount field'})
+
+    result = coupon_service.add_coupon_usage(client_id, coupon_id, amount)
     if result['status'] == 'not_found':
         return make_json_response(404, {'error': 'Coupon not found'})
     return make_json_response(200, result)
